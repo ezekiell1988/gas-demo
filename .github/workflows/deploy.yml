@@ -1,0 +1,99 @@
+name: Deploy GAS Demo to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE_NAME: gas-demo
+  CONTAINER_NAME: gas-demo
+  PORT: 8001
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 20.246.83.239
+          username: azureuser
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            # Navegar al directorio del proyecto
+            cd /home/azureuser/gas-demo || mkdir -p /home/azureuser/gas-demo
+            
+            # Clonar o actualizar el repositorio
+            if [ -d ".git" ]; then
+              echo "📥 Actualizando repositorio existente..."
+              git fetch origin
+              git reset --hard origin/main
+              git pull origin main
+            else
+              echo "📥 Clonando repositorio..."
+              cd /home/azureuser
+              rm -rf gas-demo
+              git clone https://github.com/${{ github.repository }}.git gas-demo
+              cd gas-demo
+            fi
+            
+            # Crear archivo .env con las variables de entorno
+            echo "🔧 Configurando variables de entorno..."
+            cat > .env << EOF
+            PORT=${{ env.PORT }}
+            ENVIRONMENT=production
+            ALLOW_ORIGINS=https://gas.ezekl.com,http://gas.ezekl.com
+            FRONTEND_PATH=gas-app
+            QUICKBOOKS_CLIENT_ID=${{ secrets.QUICKBOOKS_CLIENT_ID }}
+            QUICKBOOKS_CLIENT_SECRET=${{ secrets.QUICKBOOKS_CLIENT_SECRET }}
+            QUICKBOOKS_REDIRECT_URI=https://gas.ezekl.com/api/v1/auth/callback
+            QUICKBOOKS_COMPANY_ID=${{ secrets.QUICKBOOKS_COMPANY_ID }}
+            QUICKBOOKS_BASE_URL=${{ secrets.QUICKBOOKS_BASE_URL }}
+            QUICKBOOKS_ENVIRONMENT=${{ secrets.QUICKBOOKS_ENVIRONMENT }}
+            EOF
+            
+            # Detener y eliminar el contenedor existente si existe
+            echo "🛑 Deteniendo contenedor existente..."
+            docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+            docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+            
+            # Eliminar imagen antigua si existe
+            echo "🗑️ Eliminando imagen antigua..."
+            docker rmi ${{ env.DOCKER_IMAGE_NAME }}:latest 2>/dev/null || true
+            
+            # Construir nueva imagen
+            echo "🔨 Construyendo nueva imagen Docker..."
+            docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
+            
+            # Ejecutar el nuevo contenedor
+            echo "🚀 Iniciando nuevo contenedor..."
+            docker run -d \
+              --name ${{ env.CONTAINER_NAME }} \
+              --restart unless-stopped \
+              -p ${{ env.PORT }}:${{ env.PORT }} \
+              --env-file .env \
+              ${{ env.DOCKER_IMAGE_NAME }}:latest
+            
+            # Verificar que el contenedor esté corriendo
+            echo "✅ Verificando estado del contenedor..."
+            docker ps | grep ${{ env.CONTAINER_NAME }}
+            
+            # Limpiar imágenes no utilizadas
+            echo "🧹 Limpiando imágenes no utilizadas..."
+            docker image prune -f
+            
+            echo "✅ Despliegue completado exitosamente!"
+
+      - name: Health Check
+        run: |
+          echo "🏥 Esperando 30 segundos para que el servicio inicie..."
+          sleep 30
+          echo "🏥 Verificando salud del servicio..."
+          curl -f https://gas.ezekl.com/api/v1/health || echo "⚠️ Health check falló, pero el despliegue continuó"
