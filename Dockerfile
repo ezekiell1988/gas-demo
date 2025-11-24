@@ -47,5 +47,5 @@ ENV PORT=8002
 ENV ENVIRONMENT=production
 ENV FRONTEND_PATH=gas-app
 
-# Comando para ejecutar la aplicación
-CMD ["python", "-m", "app.main"]
+# Comando para ejecutar la aplicación con uvicorn directamente
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
