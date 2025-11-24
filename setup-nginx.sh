@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🔧 Configurando nginx para gas.ezekl.com en el puerto 8001..."
+echo "🔧 Configurando nginx para gas.ezekl.com en el puerto 8002..."
 
 # Crear configuración de nginx para el sitio
 cat > /etc/nginx/sites-available/gas.ezekl.com << 'EOF'
@@ -21,9 +21,9 @@ server {
     # Tamaño máximo de carga
     client_max_body_size 100M;
 
-    # Proxy hacia el contenedor Docker en puerto 8001
+    # Proxy hacia el contenedor Docker en puerto 8002
     location / {
-        proxy_pass http://127.0.0.1:8001;
+        proxy_pass http://127.0.0.1:8002;
         proxy_http_version 1.1;
         
         # Headers para proxy
@@ -45,7 +45,7 @@ server {
 
     # Health check endpoint
     location /api/v1/health {
-        proxy_pass http://127.0.0.1:8001/api/v1/health;
+        proxy_pass http://127.0.0.1:8002/api/v1/health;
         access_log off;
     }
 }
@@ -66,7 +66,7 @@ systemctl reload nginx
 echo "✅ Configuración de nginx completada!"
 echo ""
 echo "📋 Próximos pasos:"
-echo "1. Asegúrate de que el contenedor Docker esté corriendo en el puerto 8001"
+echo "1. Asegúrate de que el contenedor Docker esté corriendo en el puerto 8002"
 echo "2. Verifica que Cloudflare esté apuntando a la IP del servidor (20.246.83.239)"
 echo "3. En Cloudflare, asegúrate que el proxy esté activado (naranja)"
 echo "4. Cloudflare manejará el certificado SSL automáticamente"

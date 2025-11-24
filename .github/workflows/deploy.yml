@@ -9,7 +9,7 @@ on:
 env:
   DOCKER_IMAGE_NAME: gas-demo
   CONTAINER_NAME: gas-demo
-  PORT: 8001
+  PORT: 8002
 
 jobs:
   deploy:

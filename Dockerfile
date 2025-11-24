@@ -39,11 +39,11 @@ COPY start.py .
 # Copiar el frontend construido desde el stage anterior
 COPY --from=frontend-builder /app/frontend/www ./gas-app/www
 
-# Exponer el puerto 8001
-EXPOSE 8001
+# Exponer el puerto 8002
+EXPOSE 8002
 
 # Variables de entorno (serán sobrescritas por docker-compose o GitHub Actions)
-ENV PORT=8001
+ENV PORT=8002
 ENV ENVIRONMENT=production
 ENV FRONTEND_PATH=gas-app
 
