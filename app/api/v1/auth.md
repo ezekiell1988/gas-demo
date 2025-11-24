@@ -259,13 +259,46 @@ active_states.pop(state, None)  # Eliminar después de usar
 
 ---
 
-### ⚠️ Almacenamiento de Tokens
+### ✅ Autenticación Basada en Sesiones con Cookies
 
-**Estado Actual:** Los tokens se almacenan en memoria durante la ejecución del servidor.
+**Estado Actual:** Los tokens se almacenan en memoria por sesión usando cookies firmadas HttpOnly.
+
+**Implementación:**
+- Cada usuario tiene una sesión única identificada por `session_id`
+- Los tokens (access_token, refresh_token, realm_id) se almacenan en `user_sessions[session_id]`
+- Cookie `qb_session` firmada con `itsdangerous.URLSafeTimedSerializer`
+- HttpOnly: Cookie no accesible desde JavaScript (protección XSS)
+- Secure: Solo HTTPS en producción
+- SameSite=lax: Protección CSRF moderada
+- Max-age: 1 hora (3600 segundos)
+
+**Ventajas de seguridad:**
+- Tokens nunca expuestos al cliente
+- Cookie firmada previene falsificación
+- Aislamiento de sesiones por usuario/navegador
+- Protección contra XSS y CSRF
 
 **Consideraciones para Producción:**
 
-1. **Base de datos encriptada**
+1. **Redis con TTL automático (Recomendado para multi-instancia)**
+   ```python
+   # Ejemplo con Redis para producción
+   import redis
+   import json
+   
+   r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+   
+   # Guardar sesión con expiración automática
+   session_data = {
+       "access_token": token,
+       "refresh_token": refresh,
+       "realm_id": realm_id,
+       "token_expiry": expiry.isoformat()
+   }
+   r.setex(f"qb_session:{session_id}", 3600, json.dumps(session_data))
+   ```
+
+2. **Base de datos encriptada**
    ```python
    # Ejemplo con SQLAlchemy + cryptography
    from cryptography.fernet import Fernet
@@ -275,19 +308,11 @@ active_states.pop(state, None)  # Eliminar después de usar
    encrypted_token = cipher.encrypt(access_token.encode())
    ```
 
-2. **Redis con TTL automático**
-   ```python
-   # Ejemplo con Redis
-   import redis
-   
-   r = redis.Redis(host='localhost', port=6379, db=0)
-   r.setex(f"qb_token:{user_id}", 3600, access_token)
-   ```
-
-3. **Variables de sesión seguras**
-   - Usar cookies HttpOnly y Secure
-   - Implementar CSRF protection
-   - Usar sesiones encriptadas
+3. **Estado actual (memoria)** ✅
+   - Funcional para desarrollo y servidores single-instance
+   - Cookies HttpOnly y Secure implementadas
+   - Sesiones firmadas con itsdangerous
+   - CSRF protection con state validation
 
 ---
 

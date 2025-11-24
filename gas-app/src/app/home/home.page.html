@@ -1,7 +1,7 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
     <ion-title>
-      Blank
+      QuickBooks Auth Status
     </ion-title>
   </ion-toolbar>
 </ion-header>
@@ -9,12 +9,119 @@
 <ion-content [fullscreen]="true">
   <ion-header collapse="condense">
     <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
+      <ion-title size="large">Auth Status</ion-title>
     </ion-toolbar>
   </ion-header>
 
   <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
+    <!-- Loading State -->
+    @if (loading) {
+    <div class="loading-container">
+      <ion-spinner></ion-spinner>
+      <p>Cargando información...</p>
+    </div>
+    }
+
+    <!-- Auth Status (siempre autenticado gracias al guard) -->
+    @if (!loading && authStatus) {
+    <div class="status-container">
+      <h2>🔐 Estado de Autenticación</h2>
+
+      <!-- Authentication Status Card -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>
+            <ion-icon [name]="authStatus.authenticated ? 'checkmark-circle' : 'close-circle'"
+              [color]="authStatus.authenticated ? 'success' : 'danger'"></ion-icon>
+            Estado de Sesión
+          </ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-item lines="none">
+            <ion-label>
+              <h3>Autenticado</h3>
+              <p>¿Tienes una sesión activa?</p>
+            </ion-label>
+            <ion-badge [color]="authStatus.authenticated ? 'success' : 'danger'" slot="end">
+              {{ authStatus.authenticated ? 'Sí' : 'No' }}
+            </ion-badge>
+          </ion-item>
+
+          <ion-item lines="none">
+            <ion-label>
+              <h3>Token Válido</h3>
+              <p>¿El token sigue siendo válido?</p>
+            </ion-label>
+            <ion-badge [color]="authStatus.token_valid ? 'success' : 'warning'" slot="end">
+              {{ authStatus.token_valid ? 'Sí' : 'No' }}
+            </ion-badge>
+          </ion-item>
+
+          @if (authStatus.realm_id) {
+          <ion-item lines="none">
+            <ion-label>
+              <h3>Company ID (Realm ID)</h3>
+              <p>ID de la compañía en QuickBooks</p>
+            </ion-label>
+            <ion-badge color="primary" slot="end">
+              {{ authStatus.realm_id }}
+            </ion-badge>
+          </ion-item>
+          }
+
+          @if (authStatus.expires_at) {
+          <ion-item lines="none">
+            <ion-label>
+              <h3>Expira en</h3>
+              <p>Tiempo restante del token</p>
+            </ion-label>
+            <ion-badge [color]="authStatus.token_valid ? 'success' : 'danger'" slot="end">
+              {{ getExpiresIn() }}
+            </ion-badge>
+          </ion-item>
+          }
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Cookie Status Card -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>
+            <ion-icon [name]="hasCookie ? 'checkmark-circle' : 'close-circle'"
+              [color]="hasCookie ? 'success' : 'danger'"></ion-icon>
+            Estado de Cookie
+          </ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-item lines="none">
+            <ion-label>
+              <h3>Cookie qb_session</h3>
+              <p>Cookie de sesión HttpOnly presente</p>
+            </ion-label>
+            <ion-badge [color]="hasCookie ? 'success' : 'danger'" slot="end">
+              {{ hasCookie ? 'Presente' : 'Ausente' }}
+            </ion-badge>
+          </ion-item>
+          <p class="cookie-note">
+            ℹ️ La cookie es HttpOnly y firmada con itsdangerous para mayor seguridad.
+            No es accesible desde JavaScript, pero el navegador la envía automáticamente.
+          </p>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Actions -->
+      <div class="actions">
+        <ion-button (click)="refresh()" expand="block" fill="outline" color="primary">
+          <ion-icon slot="start" name="refresh-outline"></ion-icon>
+          Actualizar Estado
+        </ion-button>
+
+        <ion-button (click)="logout()" expand="block" color="danger">
+          <ion-icon slot="start" name="log-out-outline"></ion-icon>
+          Cerrar Sesión
+        </ion-button>
+      </div>
+    </div>
+    }
   </div>
 </ion-content>

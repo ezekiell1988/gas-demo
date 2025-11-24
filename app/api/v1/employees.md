@@ -20,15 +20,35 @@ Antes de usar los endpoints de empleados, debes:
 
 1. **Estar autenticado con QuickBooks**
    ```bash
-   GET http://localhost:8001/api/v1/auth/login
+   GET http://localhost:8002/api/v1/auth/login
    ```
+   
+   Esto creará una cookie de sesión `qb_session` en tu navegador.
 
 2. **Verificar que el token sea válido**
    ```bash
-   GET http://localhost:8001/api/v1/auth/status
+   GET http://localhost:8002/api/v1/auth/status
    ```
 
 ⚠️ **Todos los endpoints de empleados requieren autenticación activa.**
+
+### 🔐 Autenticación Basada en Sesiones
+
+Los endpoints de empleados utilizan autenticación basada en sesiones con cookies:
+
+- **Cookie `qb_session`**: Contiene el session_id firmado
+- **HttpOnly**: Cookie no accesible desde JavaScript
+- **Validación automática**: Cada request verifica la cookie y valida el token
+- **Aislamiento de sesiones**: Cada navegador/usuario tiene su propia sesión independiente
+
+**Flujo de autenticación:**
+1. Login → Crea cookie `qb_session`
+2. Request a `/employees` → Backend lee cookie automáticamente
+3. Backend valida session_id y obtiene tokens
+4. Backend usa tokens para llamar a QuickBooks API
+5. Response devuelta al cliente
+
+**No necesitas enviar headers manualmente** - las cookies se envían automáticamente.
 
 ---
 
@@ -688,7 +708,40 @@ Valores aceptados:
 }
 ```
 
-**Solución:** Completa el flujo de autenticación OAuth2.
+**Causa:** No hay cookie de sesión o la cookie es inválida.
+
+**Solución:** 
+1. Completa el flujo de autenticación OAuth2 abriendo `/auth/login` en tu navegador
+2. Asegúrate de que las cookies estén habilitadas
+3. Si usas Postman/Insomnia, habilita el manejo automático de cookies
+
+---
+
+### Error 401: Sesión No Encontrada
+
+```json
+{
+  "detail": "Sesión no encontrada. Debe autenticarse nuevamente"
+}
+```
+
+**Causa:** El servidor se reinició y las sesiones en memoria se perdieron.
+
+**Solución:** Vuelve a autenticarte con `/auth/login`
+
+---
+
+### Error 401: Token Expirado
+
+```json
+{
+  "detail": "Token expirado. Debe autenticarse nuevamente"
+}
+```
+
+**Causa:** El access token de QuickBooks tiene 1 hora de validez y expiró.
+
+**Solución:** Vuelve a autenticarte con `/auth/login` (mejora futura: refresh automático)
 
 ---
 

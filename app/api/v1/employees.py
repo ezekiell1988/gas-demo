@@ -3,18 +3,23 @@ CRUD completo para empleados de QuickBooks.
 Maneja la creación, lectura, actualización y eliminación de empleados.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
-from datetime import date
+from typing import Optional, List, Dict, Any
+from datetime import date, datetime, timedelta
 import logging
+from itsdangerous import URLSafeTimedSerializer
 
 from app.utils.quickbooks_auth import quickbooks_auth
 from app.core.http_request import HTTPClient
+from app.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Importar user_sessions y serializer desde auth.py
+from app.api.v1.auth import user_sessions, serializer
 
 
 # Modelos Pydantic para Employee
@@ -120,19 +125,46 @@ class EmployeeUpdate(BaseModel):
     Active: Optional[bool] = None
 
 
-# Helper para verificar autenticación
-async def check_auth():
-    """Verifica que el usuario esté autenticado con QuickBooks."""
-    if not quickbooks_auth.access_token:
+# Helper para verificar autenticación y obtener tokens de la sesión
+async def get_session_data(request: Request) -> Dict[str, Any]:
+    """Verifica que el usuario esté autenticado y retorna los datos de sesión."""
+    # Obtener cookie de sesión
+    session_cookie = request.cookies.get("qb_session")
+    
+    if not session_cookie:
         raise HTTPException(
             status_code=401,
             detail="No autenticado. Debe llamar a /auth/login primero"
         )
     
-    if not quickbooks_auth.is_token_valid():
+    try:
+        # Deserializar session_id de la cookie firmada
+        session_id = serializer.loads(session_cookie, max_age=3600)
+        
+        # Verificar si existe sesión para este usuario
+        if session_id not in user_sessions:
+            raise HTTPException(
+                status_code=401,
+                detail="Sesión no encontrada. Debe autenticarse nuevamente"
+            )
+        
+        session_data = user_sessions[session_id]
+        token_expiry = session_data.get("token_expiry")
+        
+        # Verificar si el token sigue siendo válido
+        if not token_expiry or datetime.now() >= (token_expiry - timedelta(minutes=5)):
+            raise HTTPException(
+                status_code=401,
+                detail="Token expirado. Debe autenticarse nuevamente"
+            )
+        
+        return session_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error verificando autenticación: {str(e)}")
         raise HTTPException(
             status_code=401,
-            detail="Token expirado. Llame a /auth/refresh"
+            detail="Error de autenticación. Debe llamar a /auth/login"
         )
 
 
@@ -143,6 +175,7 @@ async def check_auth():
     description="Obtiene la lista completa de empleados desde QuickBooks con opciones de filtrado por estado activo y límite de resultados."
 )
 async def get_all_employees(
+    request: Request,
     active: Optional[bool] = None,
     limit: int = 100
 ):
@@ -165,7 +198,8 @@ async def get_all_employees(
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión (incluye access_token, realm_id)
+    session_data = await get_session_data(request)
     
     try:
         client = HTTPClient()
@@ -176,8 +210,17 @@ async def get_all_employees(
             query += f" WHERE Active = {str(active).lower()}"
         query += f" MAXRESULTS {limit}"
         
-        url = quickbooks_auth.get_company_url(f"query?query={query}")
-        headers = quickbooks_auth.get_auth_headers()
+        # Construir URL con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        url = f"{base_url}/company/{realm_id}/query?query={query}"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         logger.info(f"📋 Obteniendo empleados: {query}")
         
@@ -208,7 +251,7 @@ async def get_all_employees(
     summary="Obtener empleado por ID",
     description="Obtiene los detalles completos de un empleado específico utilizando su ID de QuickBooks."
 )
-async def get_employee(employee_id: str):
+async def get_employee(request: Request, employee_id: str):
     """
     Obtiene los detalles de un empleado específico.
     
@@ -231,12 +274,23 @@ async def get_employee(employee_id: str):
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión
+    session_data = await get_session_data(request)
     
     try:
         client = HTTPClient()
-        url = quickbooks_auth.get_company_url(f"employee/{employee_id}")
-        headers = quickbooks_auth.get_auth_headers()
+        
+        # Construir URL con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        url = f"{base_url}/company/{realm_id}/employee/{employee_id}"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         logger.info(f"👤 Obteniendo empleado ID: {employee_id}")
         
@@ -267,7 +321,7 @@ async def get_employee(employee_id: str):
     summary="Crear empleado",
     description="Crea un nuevo empleado en QuickBooks con la información proporcionada. Requiere nombre y apellido."
 )
-async def create_employee(employee: EmployeeCreate):
+async def create_employee(request: Request, employee: EmployeeCreate):
     """
     Crea un nuevo empleado en QuickBooks.
     
@@ -298,12 +352,23 @@ async def create_employee(employee: EmployeeCreate):
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión
+    session_data = await get_session_data(request)
     
     try:
         client = HTTPClient()
-        url = quickbooks_auth.get_company_url("employee")
-        headers = quickbooks_auth.get_auth_headers()
+        
+        # Construir URL con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        url = f"{base_url}/company/{realm_id}/employee"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         # Convertir a dict y remover None
         employee_data = employee.model_dump(exclude_none=True)
@@ -337,7 +402,7 @@ async def create_employee(employee: EmployeeCreate):
     summary="Actualizar empleado",
     description="Actualiza completamente la información de un empleado existente. Requiere ID y SyncToken del empleado."
 )
-async def update_employee(employee_id: str, employee: EmployeeUpdate):
+async def update_employee(request: Request, employee_id: str, employee: EmployeeUpdate):
     """
     Actualiza un empleado existente (Full Update).
     
@@ -369,7 +434,8 @@ async def update_employee(employee_id: str, employee: EmployeeUpdate):
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión
+    session_data = await get_session_data(request)
     
     if employee.Id != employee_id:
         raise HTTPException(
@@ -379,8 +445,18 @@ async def update_employee(employee_id: str, employee: EmployeeUpdate):
     
     try:
         client = HTTPClient()
-        url = quickbooks_auth.get_company_url("employee")
-        headers = quickbooks_auth.get_auth_headers()
+        
+        # Construir URL con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        url = f"{base_url}/company/{realm_id}/employee"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         # Convertir a dict y remover None
         employee_data = employee.model_dump(exclude_none=True)
@@ -414,7 +490,7 @@ async def update_employee(employee_id: str, employee: EmployeeUpdate):
     summary="Desactivar empleado",
     description="Desactiva un empleado estableciendo Active=false. QuickBooks no permite eliminación permanente de empleados."
 )
-async def deactivate_employee(employee_id: str):
+async def deactivate_employee(request: Request, employee_id: str):
     """
     Desactiva un empleado (soft delete).
     
@@ -435,15 +511,24 @@ async def deactivate_employee(employee_id: str):
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión
+    session_data = await get_session_data(request)
     
     try:
         # Primero obtener el empleado para tener el SyncToken
         client = HTTPClient()
         
-        # Get employee
-        get_url = quickbooks_auth.get_company_url(f"employee/{employee_id}")
-        headers = quickbooks_auth.get_auth_headers()
+        # Construir URLs con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        get_url = f"{base_url}/company/{realm_id}/employee/{employee_id}"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         get_response = await client.get(get_url, headers=headers)
         
@@ -460,7 +545,7 @@ async def deactivate_employee(employee_id: str):
         logger.info(f"🗑️ Desactivando empleado ID: {employee_id}")
         
         # Update employee
-        update_url = quickbooks_auth.get_company_url("employee")
+        update_url = f"{base_url}/company/{realm_id}/employee"
         update_response = await client.post(update_url, headers=headers, json_data=employee)
         
         if update_response.status == 200:
@@ -488,7 +573,7 @@ async def deactivate_employee(employee_id: str):
     summary="Activar empleado",
     description="Reactiva un empleado previamente desactivado estableciendo Active=true."
 )
-async def activate_employee(employee_id: str):
+async def activate_employee(request: Request, employee_id: str):
     """
     Reactiva un empleado desactivado.
     
@@ -506,14 +591,23 @@ async def activate_employee(employee_id: str):
     }
     ```
     """
-    await check_auth()
+    # Obtener datos de sesión
+    session_data = await get_session_data(request)
     
     try:
         client = HTTPClient()
         
-        # Get employee
-        get_url = quickbooks_auth.get_company_url(f"employee/{employee_id}")
-        headers = quickbooks_auth.get_auth_headers()
+        # Construir URLs con realm_id de la sesión
+        base_url = settings.quickbooks_base_url
+        realm_id = session_data.get("realm_id")
+        get_url = f"{base_url}/company/{realm_id}/employee/{employee_id}"
+        
+        # Headers con access_token de la sesión
+        headers = {
+            "Authorization": f"Bearer {session_data.get('access_token')}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
         
         get_response = await client.get(get_url, headers=headers)
         
@@ -530,7 +624,7 @@ async def activate_employee(employee_id: str):
         logger.info(f"✅ Activando empleado ID: {employee_id}")
         
         # Update employee
-        update_url = quickbooks_auth.get_company_url("employee")
+        update_url = f"{base_url}/company/{realm_id}/employee"
         update_response = await client.post(update_url, headers=headers, json_data=employee)
         
         if update_response.status == 200:
