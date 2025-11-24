@@ -89,6 +89,8 @@ GET /api/v1/employees
 | `/api/v1/auth/login` | GET | Inicia el flujo OAuth2, genera state seguro y redirige a QuickBooks |
 | `/api/v1/auth/callback` | GET | Callback OAuth2: valida state, intercambia código por tokens, redirige a `/` |
 | `/api/v1/auth/status` | GET | Verifica el estado actual de autenticación y validez del token |
+| `/api/v1/auth/refresh` | POST | Renueva el access_token usando el refresh_token |
+| `/api/v1/auth/logout` | POST | Revoca tokens en QuickBooks y cierra la sesión |
 
 ---
 
@@ -163,10 +165,71 @@ GET http://localhost:8002/api/v1/auth/status
 {
   "authenticated": true,
   "token_valid": true,
-  "realm_id": "9341455750901915",
+  "realm_id": "123456789",
   "expires_at": "2025-11-24T10:30:00"
 }
 ```
+
+---
+
+#### `POST /api/v1/auth/refresh`
+
+**Resumen:** Renovar token de acceso
+
+**Descripción:** Renueva el access_token usando el refresh_token almacenado en la sesión. QuickBooks tokens expiran después de 1 hora, este endpoint permite obtener nuevos tokens sin reautenticación.
+
+**Detalles de tokens:**
+- Access token válido: **1 hora** (3600 segundos)
+- Refresh token válido: **100 días** (8726400 segundos)
+- Cada refresh devuelve **nuevos** access_token Y refresh_token
+
+**Ejemplo:**
+```bash
+POST http://localhost:8002/api/v1/auth/refresh
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "status": "success",
+  "message": "Token renovado exitosamente",
+  "expires_in": 3600,
+  "token_expiry": "2025-11-24T11:30:00"
+}
+```
+
+**Errores Posibles:**
+- `401 Unauthorized`: No hay sesión activa o refresh_token no disponible
+- `400 Bad Request`: OAuth2 no configurado
+- `500 Internal Server Error`: Error renovando token en QuickBooks
+
+---
+
+#### `POST /api/v1/auth/logout`
+
+**Resumen:** Cerrar sesión
+
+**Descripción:** Cierra la sesión del usuario revocando el refresh_token en QuickBooks (lo cual también revoca el access_token asociado) y eliminando la sesión del servidor.
+
+**Acciones realizadas:**
+1. Revoca el refresh_token en QuickBooks
+2. Elimina la sesión del diccionario `user_sessions`
+3. Limpia la cookie `qb_session` del navegador
+
+**Ejemplo:**
+```bash
+POST http://localhost:8002/api/v1/auth/logout
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "status": "success",
+  "message": "Sesión cerrada exitosamente"
+}
+```
+
+**Nota:** Revocar el refresh_token automáticamente revoca el access_token en QuickBooks según la documentación oficial de OAuth2.
 
 ## 💻 Ejemplos de Uso
 

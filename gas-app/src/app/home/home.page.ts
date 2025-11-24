@@ -16,6 +16,11 @@ import {
   IonItem,
   IonLabel,
   IonSpinner,
+  IonGrid,
+  IonRow,
+  IonCol,
+  IonList,
+  IonNote,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
@@ -25,6 +30,8 @@ import {
   businessOutline,
   refreshOutline,
   logOutOutline,
+  syncOutline,
+  logInOutline,
 } from 'ionicons/icons';
 
 interface AuthStatus {
@@ -37,7 +44,6 @@ interface AuthStatus {
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
-  styleUrls: ['home.page.scss'],
   imports: [
     CommonModule,
     IonHeader,
@@ -54,12 +60,18 @@ interface AuthStatus {
     IonItem,
     IonLabel,
     IonSpinner,
+    IonGrid,
+    IonRow,
+    IonCol,
+    IonList,
+    IonNote,
   ],
 })
 export class HomePage implements OnInit {
   authStatus: AuthStatus | null = null;
   loading = true;
   hasCookie = false;
+  loggedOut = false;
 
   constructor(private http: HttpClient) {
     addIcons({
@@ -69,6 +81,8 @@ export class HomePage implements OnInit {
       businessOutline,
       refreshOutline,
       logOutOutline,
+      syncOutline,
+      logInOutline,
     });
   }
 
@@ -106,11 +120,46 @@ export class HomePage implements OnInit {
     this.loadAuthInfo();
   }
 
+  refreshToken() {
+    this.loading = true;
+
+    this.http.post('/v1/auth/refresh', {}).subscribe({
+      next: (response: any) => {
+        console.log('✅ Token renovado:', response);
+        // Recargar información de autenticación
+        this.loadAuthInfo();
+      },
+      error: (err) => {
+        console.error('❌ Error renovando token:', err);
+        this.loading = false;
+        // Si falla, redirigir al login
+        window.location.href = '/v1/auth/login';
+      },
+    });
+  }
+
   logout() {
-    // Limpiar la cookie de sesión
-    document.cookie =
-      'qb_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    // Redirigir al login
+    this.loading = true;
+
+    this.http.post('/v1/auth/logout', {}).subscribe({
+      next: (response: any) => {
+        console.log('✅ Sesión cerrada:', response);
+        this.loading = false;
+        this.loggedOut = true;
+      },
+      error: (err) => {
+        console.error('❌ Error cerrando sesión:', err);
+        // Aún así limpiar cookie y marcar como logged out
+        document.cookie =
+          'qb_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        this.loading = false;
+        this.loggedOut = true;
+      },
+    });
+  }
+
+  relogin() {
+    // Recargar la página para que el guard redirija al login
     window.location.href = '/v1/auth/login';
   }
 

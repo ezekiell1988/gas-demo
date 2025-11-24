@@ -9,11 +9,13 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import logging
 import secrets
+import base64
 from datetime import datetime, timedelta
 from itsdangerous import URLSafeTimedSerializer
 
 from app.utils.quickbooks_auth import quickbooks_auth
 from app.core.settings import settings
+from app.core.http_request import HTTPClient
 
 logger = logging.getLogger(__name__)
 
@@ -240,4 +242,201 @@ async def auth_status(request: Request):
             "token_valid": False,
             "realm_id": None,
             "expires_at": None
+        }
+
+
+@router.post(
+    "/auth/refresh",
+    tags=["Authentication"],
+    summary="Renovar token de acceso",
+    description="Renueva el access_token usando el refresh_token. Devuelve nuevos tokens y actualiza la sesión."
+)
+async def refresh_token(request: Request):
+    """
+    Renueva el access_token usando el refresh_token.
+    
+    QuickBooks tokens expiran después de 1 hora.
+    Este endpoint usa el refresh_token para obtener nuevos tokens.
+    
+    **Importante:**
+    - Access token válido: 1 hora (3600 segundos)
+    - Refresh token válido: 100 días (8726400 segundos)
+    - Cada refresh devuelve NUEVOS access_token Y refresh_token
+    """
+    # Obtener cookie de sesión
+    session_cookie = request.cookies.get("qb_session")
+    
+    if not session_cookie:
+        raise HTTPException(
+            status_code=401,
+            detail="No autenticado. Debe llamar a /auth/login primero"
+        )
+    
+    if not oauth_config:
+        raise HTTPException(status_code=400, detail="OAuth2 no configurado")
+    
+    try:
+        # Deserializar session_id de la cookie firmada
+        session_id = serializer.loads(session_cookie, max_age=3600)
+        
+        # Verificar si existe sesión para este usuario
+        if session_id not in user_sessions:
+            raise HTTPException(
+                status_code=401,
+                detail="Sesión no encontrada. Debe autenticarse nuevamente"
+            )
+        
+        session_data = user_sessions[session_id]
+        refresh_token_value = session_data.get("refresh_token")
+        
+        if not refresh_token_value:
+            raise HTTPException(
+                status_code=401,
+                detail="Refresh token no disponible. Debe autenticarse nuevamente"
+            )
+        
+        # Preparar credenciales en formato Basic Auth
+        credentials = f"{oauth_config.client_id}:{oauth_config.client_secret}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        # Llamar al endpoint de refresh de QuickBooks
+        client = HTTPClient()
+        url = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        }
+        
+        # Body como form-urlencoded
+        body = f"grant_type=refresh_token&refresh_token={refresh_token_value}"
+        
+        logger.info(f"🔄 Renovando token para sesión {session_id}")
+        
+        response = await client.post(url, headers=headers, data=body)
+        
+        if response.status == 200:
+            token_data = await response.json()
+            
+            # Actualizar sesión con nuevos tokens
+            expires_in = token_data.get("expires_in", 3600)
+            user_sessions[session_id].update({
+                "access_token": token_data.get("access_token"),
+                "refresh_token": token_data.get("refresh_token"),
+                "token_expiry": datetime.now() + timedelta(seconds=expires_in)
+            })
+            
+            logger.info(f"✅ Token renovado exitosamente para sesión {session_id}")
+            
+            return {
+                "status": "success",
+                "message": "Token renovado exitosamente",
+                "expires_in": expires_in,
+                "token_expiry": user_sessions[session_id]["token_expiry"].isoformat()
+            }
+        else:
+            error_text = await response.text()
+            logger.error(f"❌ Error renovando token: {response.status} - {error_text}")
+            raise HTTPException(
+                status_code=response.status,
+                detail=f"Error renovando token: {error_text}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error renovando token: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error interno renovando token: {str(e)}"
+        )
+
+
+@router.post(
+    "/auth/logout",
+    tags=["Authentication"],
+    summary="Cerrar sesión",
+    description="Revoca el refresh_token en QuickBooks y limpia la sesión local."
+)
+async def logout(request: Request, response: Response):
+    """
+    Cierra la sesión del usuario.
+    
+    Realiza dos acciones:
+    1. Revoca el refresh_token en QuickBooks (también revoca el access_token)
+    2. Elimina la sesión del servidor y limpia la cookie
+    
+    **Nota:** Revocar el refresh_token automáticamente revoca el access_token asociado.
+    """
+    # Obtener cookie de sesión
+    session_cookie = request.cookies.get("qb_session")
+    
+    if not session_cookie:
+        # No hay sesión, simplemente limpiar cookie
+        response.delete_cookie("qb_session")
+        return {
+            "status": "success",
+            "message": "Sesión cerrada (no había sesión activa)"
+        }
+    
+    if not oauth_config:
+        raise HTTPException(status_code=400, detail="OAuth2 no configurado")
+    
+    try:
+        # Deserializar session_id de la cookie firmada
+        session_id = serializer.loads(session_cookie, max_age=3600)
+        
+        # Verificar si existe sesión para este usuario
+        if session_id in user_sessions:
+            session_data = user_sessions[session_id]
+            refresh_token_value = session_data.get("refresh_token")
+            
+            if refresh_token_value:
+                # Preparar credenciales en formato Basic Auth
+                credentials = f"{oauth_config.client_id}:{oauth_config.client_secret}"
+                encoded_credentials = base64.b64encode(credentials.encode()).decode()
+                
+                # Llamar al endpoint de revoke de QuickBooks
+                client = HTTPClient()
+                url = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
+                headers = {
+                    "Authorization": f"Basic {encoded_credentials}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+                
+                body = {"token": refresh_token_value}
+                
+                logger.info(f"🚪 Revocando token para sesión {session_id}")
+                
+                try:
+                    revoke_response = await client.post(url, headers=headers, json_data=body)
+                    
+                    if revoke_response.status == 200:
+                        logger.info(f"✅ Token revocado exitosamente en QuickBooks")
+                    else:
+                        error_text = await revoke_response.text()
+                        logger.warning(f"⚠️ Error revocando token en QuickBooks: {revoke_response.status} - {error_text}")
+                except Exception as revoke_error:
+                    logger.warning(f"⚠️ Error revocando token en QuickBooks: {str(revoke_error)}")
+            
+            # Eliminar sesión del servidor
+            user_sessions.pop(session_id, None)
+            logger.info(f"✅ Sesión {session_id} eliminada del servidor")
+        
+        # Limpiar cookie
+        response.delete_cookie("qb_session")
+        
+        return {
+            "status": "success",
+            "message": "Sesión cerrada exitosamente"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error cerrando sesión: {str(e)}")
+        # Aún así limpiar la cookie
+        response.delete_cookie("qb_session")
+        return {
+            "status": "success",
+            "message": "Sesión cerrada (con advertencias)"
         }
