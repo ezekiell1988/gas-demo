@@ -91,8 +91,9 @@ async def serve_frontend_routes(path: str):
     if not FRONTEND_BUILD_PATH.exists():
         return RedirectResponse(url="/docs")
 
-    # Verificar si es una ruta de API
-    if path.startswith("api/"):
+    # Verificar si es una ruta de API - NO servir index.html
+    # Soporta: api/, v1/, v2/, v3/, etc.
+    if path.startswith("v1/"):
         return RedirectResponse(url="/docs")
 
     # Verificar si el archivo solicitado existe

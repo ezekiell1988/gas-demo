@@ -1,6 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import {
   IonHeader,
   IonToolbar,
@@ -10,9 +9,12 @@ import {
   IonCardHeader,
   IonCardTitle,
   IonCardContent,
+  IonCardSubtitle,
   IonButton,
+  IonButtons,
   IonIcon,
   IonBadge,
+  IonChip,
   IonItem,
   IonLabel,
   IonSpinner,
@@ -32,14 +34,18 @@ import {
   logOutOutline,
   syncOutline,
   logInOutline,
+  shieldCheckmarkOutline,
+  shieldCheckmark,
+  shieldOutline,
+  key,
+  keyOutline,
+  informationCircleOutline,
+  hourglassOutline,
+  lockClosedOutline,
+  checkmark,
+  close,
 } from 'ionicons/icons';
-
-interface AuthStatus {
-  authenticated: boolean;
-  token_valid: boolean;
-  realm_id: string | null;
-  expires_at: string | null;
-}
+import { AuthService, AuthStatus } from '../services/auth.service';
 
 @Component({
   selector: 'app-home',
@@ -54,9 +60,12 @@ interface AuthStatus {
     IonCardHeader,
     IonCardTitle,
     IonCardContent,
+    IonCardSubtitle,
     IonButton,
+    IonButtons,
     IonIcon,
     IonBadge,
+    IonChip,
     IonItem,
     IonLabel,
     IonSpinner,
@@ -73,7 +82,7 @@ export class HomePage implements OnInit {
   hasCookie = false;
   loggedOut = false;
 
-  constructor(private http: HttpClient) {
+  constructor(private authService: AuthService) {
     addIcons({
       checkmarkCircle,
       closeCircle,
@@ -83,6 +92,16 @@ export class HomePage implements OnInit {
       logOutOutline,
       syncOutline,
       logInOutline,
+      shieldCheckmarkOutline,
+      shieldCheckmark,
+      shieldOutline,
+      key,
+      keyOutline,
+      informationCircleOutline,
+      hourglassOutline,
+      lockClosedOutline,
+      checkmark,
+      close,
     });
   }
 
@@ -93,15 +112,16 @@ export class HomePage implements OnInit {
   loadAuthInfo() {
     this.loading = true;
 
-    this.http.get<AuthStatus>('/v1/auth/status').subscribe({
+    // Usar el servicio de autenticación (ya tiene caché del guard)
+    this.authService.getAuthStatus().subscribe({
       next: (status) => {
         this.authStatus = status;
         this.checkCookie();
         this.loading = false;
-        console.log('✅ Estado de autenticación:', status);
+        console.log('✅ Estado de autenticación [HomePage]:', status);
       },
       error: (err) => {
-        console.error('❌ Error:', err);
+        console.error('❌ Error [HomePage]:', err);
         // Si hay error, el guard redirigirá al login
         this.loading = false;
       },
@@ -109,21 +129,29 @@ export class HomePage implements OnInit {
   }
 
   checkCookie() {
-    // Verificar si existe la cookie qb_session
-    this.hasCookie = document.cookie
-      .split(';')
-      .some((c) => c.trim().startsWith('qb_session='));
+    this.hasCookie = this.authService.hasCookie();
     console.log('🍪 Cookie qb_session presente:', this.hasCookie);
   }
 
   refresh() {
-    this.loadAuthInfo();
+    // Forzar actualización del estado
+    this.loading = true;
+    this.authService.getAuthStatus(true).subscribe({
+      next: (status) => {
+        this.authStatus = status;
+        this.checkCookie();
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+      },
+    });
   }
 
   refreshToken() {
     this.loading = true;
 
-    this.http.post('/v1/auth/refresh', {}).subscribe({
+    this.authService.refreshToken().subscribe({
       next: (response: any) => {
         console.log('✅ Token renovado:', response);
         // Recargar información de autenticación
@@ -141,7 +169,7 @@ export class HomePage implements OnInit {
   logout() {
     this.loading = true;
 
-    this.http.post('/v1/auth/logout', {}).subscribe({
+    this.authService.logout().subscribe({
       next: (response: any) => {
         console.log('✅ Sesión cerrada:', response);
         this.loading = false;
@@ -176,5 +204,13 @@ export class HomePage implements OnInit {
     const seconds = Math.floor((diff % 60000) / 1000);
 
     return `${minutes}m ${seconds}s`;
+  }
+
+  getCurrentTime(): string {
+    return new Date().toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   }
 }

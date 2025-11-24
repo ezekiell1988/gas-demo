@@ -181,7 +181,19 @@ async def oauth_callback(
         logger.info(f"✅ Company ID (realmId): {realmId}")
         logger.info(f"✅ Tokens guardados en sesión, redirigiendo a /")
         
-        return RedirectResponse(url="/", status_code=302)
+        # Crear respuesta con redirect y asegurar que la cookie esté presente
+        response = RedirectResponse(url="/", status_code=302)
+        response.set_cookie(
+            key="qb_session",
+            value=serializer.dumps(session_id),
+            httponly=True,
+            secure=settings.environment == "production",
+            samesite="lax",
+            max_age=3600,  # 1 hora
+            path="/"
+        )
+        
+        return response
     except Exception as e:
         logger.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
