@@ -80,7 +80,7 @@ class HTTPClient:
         data: Optional[Union[Dict[str, Any], str, bytes]] = None,
         json_data: Optional[Dict[str, Any]] = None,
         **kwargs
-    ) -> aiohttp.ClientResponse:
+    ) -> 'ResponseWrapper':
         """
         Realiza una petición HTTP genérica.
         
@@ -94,14 +94,13 @@ class HTTPClient:
             **kwargs: Argumentos adicionales para aiohttp
             
         Returns:
-            Respuesta de aiohttp
+            ResponseWrapper con los datos de la respuesta
             
         Raises:
             aiohttp.ClientError: Si ocurre un error en la petición
         """
         full_url = self._build_url(url)
         merged_headers = self._merge_headers(headers)
-        
         
         async with aiohttp.ClientSession(
             timeout=self.timeout,
@@ -115,7 +114,29 @@ class HTTPClient:
                 json=json_data,
                 **kwargs
             ) as response:
-                return response
+                # Leer el contenido antes de que se cierre la conexión
+                response_status = response.status
+                response_headers = response.headers
+                response_content = await response.read()
+                
+                # Wrapper para mantener la interfaz compatible
+                class ResponseWrapper:
+                    def __init__(self, status, headers, content):
+                        self.status = status
+                        self.headers = headers
+                        self._content = content
+                    
+                    async def text(self):
+                        return self._content.decode('utf-8')
+                    
+                    async def read(self):
+                        return self._content
+                    
+                    async def json(self):
+                        import json
+                        return json.loads(self._content.decode('utf-8'))
+                
+                return ResponseWrapper(response_status, response_headers, response_content)
                 
     async def get(
         self,

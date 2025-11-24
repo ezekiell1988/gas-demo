@@ -20,7 +20,7 @@ Este módulo implementa la autenticación OAuth2 con QuickBooks Online API para 
 3. Obtén tus credenciales:
    - **Client ID**
    - **Client Secret**
-   - **Redirect URI** (ejemplo: `http://localhost:8001/api/v1/auth/callback`)
+   - **Redirect URI** (ejemplo: `http://localhost:8002/v1/auth/callback`)
 
 ### 2. Variables de Entorno
 
@@ -29,7 +29,7 @@ Configura las siguientes variables en tu archivo `.env`:
 ```env
 QUICKBOOKS_CLIENT_ID=tu_client_id
 QUICKBOOKS_CLIENT_SECRET=tu_client_secret
-QUICKBOOKS_REDIRECT_URI=http://localhost:8001/api/v1/auth/callback
+QUICKBOOKS_REDIRECT_URI=http://localhost:8002/v1/auth/callback
 QUICKBOOKS_COMPANY_ID=tu_company_id
 QUICKBOOKS_BASE_URL=https://sandbox-quickbooks.api.intuit.com/v3
 ```
@@ -41,41 +41,34 @@ QUICKBOOKS_BASE_URL=https://sandbox-quickbooks.api.intuit.com/v3
 Abre en tu navegador:
 
 ```
-GET http://localhost:8001/api/v1/auth/login
+GET http://localhost:8002/api/v1/auth/login
 ```
 
-Esto redirige automáticamente a QuickBooks para autorización.
+Esto:
+1. Genera un `state` aleatorio seguro (protección CSRF)
+2. Redirige automáticamente a QuickBooks para autorización
 
-**Respuesta:** Redirección a la página de autenticación de QuickBooks
+**Respuesta:** Redirección HTTP 302 a la página de autenticación de QuickBooks
 
 ---
 
 ### Paso 2: Autorización en QuickBooks
 
-El usuario autoriza la aplicación en QuickBooks (automático).
+El usuario autoriza la aplicación en QuickBooks (interfaz de Intuit).
 
 ---
 
-### Paso 3: Callback (Automático)
+### Paso 3: Callback y Redirección (Automático)
 
-QuickBooks redirige a: `http://localhost:8001/api/v1/auth/callback?code=XXX&realmId=YYY`
+QuickBooks redirige a: `http://localhost:8002/v1/auth/callback?code=XXX&state=YYY&realmId=ZZZ`
 
 El sistema automáticamente:
-- Intercambia el código por tokens
-- Guarda access_token y refresh_token
-- Retorna la información de la sesión
+1. Valida el `state` para prevenir ataques CSRF
+2. Intercambia el código por tokens de acceso
+3. Guarda access_token y refresh_token en memoria
+4. **Redirige a la raíz del proyecto (`/`)** para continuar usando la aplicación
 
-**Respuesta:**
-```json
-{
-  "status": "success",
-  "message": "Autenticación exitosa",
-  "realm_id": "9341455750901915",
-  "access_token": "eyJlbmMiOiJBMTI4Q0JDLUhTMjU2I...",
-  "refresh_token": "AB11234567890...",
-  "expires_in": 3600
-}
-```
+**Respuesta:** Redirección HTTP 302 a `/` (página principal de la aplicación)
 
 ---
 
@@ -93,8 +86,8 @@ GET /api/v1/employees
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/api/v1/auth/login` | GET | Inicia el flujo de autenticación OAuth2 con QuickBooks |
-| `/api/v1/auth/callback` | GET | Callback automático de OAuth2 para intercambiar código por tokens |
+| `/api/v1/auth/login` | GET | Inicia el flujo OAuth2, genera state seguro y redirige a QuickBooks |
+| `/api/v1/auth/callback` | GET | Callback OAuth2: valida state, intercambia código por tokens, redirige a `/` |
 | `/api/v1/auth/status` | GET | Verifica el estado actual de autenticación y validez del token |
 
 ---
@@ -105,15 +98,20 @@ GET /api/v1/employees
 
 **Resumen:** Iniciar sesión con QuickBooks
 
-**Descripción:** Inicia el flujo de autenticación OAuth2 con QuickBooks. Redirige al usuario a la página de autorización de QuickBooks.
+**Descripción:** Inicia el flujo de autenticación OAuth2 con QuickBooks. Genera un `state` aleatorio único usando `secrets.token_urlsafe(32)` para protección CSRF y redirige al usuario a la página de autorización de QuickBooks con los scopes correctos.
+
+**Scopes incluidos:**
+- `com.intuit.quickbooks.accounting` - Acceso a datos contables
+- `openid` - Requerido para OpenID Connect
+- `profile`, `email`, `phone`, `address` - Información del usuario (opcional)
 
 **Ejemplo:**
 ```bash
-GET http://localhost:8001/api/v1/auth/login
+GET http://localhost:8002/api/v1/auth/login
 ```
 
 **Respuesta:**
-- Redirección HTTP 302 a QuickBooks
+- Redirección HTTP 302 a QuickBooks con state seguro
 
 ---
 
@@ -121,23 +119,29 @@ GET http://localhost:8001/api/v1/auth/login
 
 **Resumen:** Callback de OAuth2
 
-**Descripción:** Endpoint de callback que recibe el código de autorización desde QuickBooks y lo intercambia por tokens de acceso.
+**Descripción:** Endpoint de callback que recibe el código de autorización desde QuickBooks, valida el state para prevenir CSRF, intercambia el código por tokens de acceso y redirige a la página principal.
 
 **Parámetros Query:**
-- `code` (string): Código de autorización de QuickBooks
-- `realmId` (string): ID de la compañía (Company ID)
-- `state` (string): Estado de seguridad OAuth2
+- `code` (string, requerido): Código de autorización de QuickBooks
+- `state` (string, requerido): Token de seguridad OAuth2 (validado contra el generado en login)
+- `realmId` (string, requerido): ID de la compañía (Company ID)
 - `error` (string, opcional): Mensaje de error si falla la autorización
 
+**Flujo de seguridad:**
+1. Valida que el `state` recibido coincida con el generado
+2. Si el state es inválido, retorna error 400 (posible ataque CSRF)
+3. Elimina el state usado (un solo uso)
+4. Intercambia código por tokens
+5. Guarda tokens en memoria
+6. Redirige a `/`
+
 **Respuesta exitosa:**
+- Redirección HTTP 302 a `/` (aplicación principal)
+
+**Respuesta de error (state inválido):**
 ```json
 {
-  "status": "success",
-  "message": "Autenticación exitosa",
-  "realm_id": "9341455750901915",
-  "access_token": "eyJlbmMiOiJBMTI4Q0JDLUhTMjU2I...",
-  "refresh_token": "AB11234567890...",
-  "expires_in": 3600
+  "detail": "State inválido. Posible ataque CSRF. Inicie el proceso de login nuevamente."
 }
 ```
 
@@ -151,7 +155,7 @@ GET http://localhost:8001/api/v1/auth/login
 
 **Ejemplo:**
 ```bash
-GET http://localhost:8001/api/v1/auth/status
+GET http://localhost:8002/api/v1/auth/status
 ```
 
 **Respuesta:**
@@ -173,14 +177,17 @@ import webbrowser
 import aiohttp
 
 async def authenticate_with_quickbooks():
-    base_url = "http://localhost:8001/api/v1"
+    base_url = "http://localhost:8002/api/v1"
     
     # 1. Abrir navegador para login
     print("🚀 Abriendo navegador para autenticación...")
     webbrowser.open(f"{base_url}/auth/login")
     
-    # 2. Esperar a que el usuario complete la autenticación
-    input("Presiona Enter después de autorizar en QuickBooks...")
+    # 2. El usuario será redirigido automáticamente a / después de autorizar
+    print("✅ Después de autorizar, serás redirigido a la aplicación principal")
+    
+    # 3. Esperar un momento para que se complete el callback
+    await asyncio.sleep(3)
     
     # 3. Verificar estado de autenticación
     async with aiohttp.ClientSession() as session:
@@ -203,7 +210,7 @@ async def authenticate_with_quickbooks():
 import aiohttp
 
 async def call_employees_api():
-    base_url = "http://localhost:8001/api/v1"
+    base_url = "http://localhost:8002/api/v1"
     
     async with aiohttp.ClientSession() as session:
         # Verificar autenticación
@@ -224,6 +231,33 @@ async def call_employees_api():
 ```
 
 ## 🔐 Seguridad
+
+### ✅ Protección CSRF Implementada
+
+La aplicación implementa protección contra ataques CSRF (Cross-Site Request Forgery) en el flujo OAuth:
+
+1. **Generación de state**: Se genera un token aleatorio seguro usando `secrets.token_urlsafe(32)`
+2. **Almacenamiento temporal**: El state se guarda en memoria antes de redirigir a QuickBooks
+3. **Validación en callback**: Se verifica que el state recibido coincida con el generado
+4. **Un solo uso**: El state se elimina después de usarse, evitando reutilización
+
+**Implementación actual:**
+```python
+import secrets
+
+# En login
+state = secrets.token_urlsafe(32)
+active_states[state] = True
+
+# En callback
+if not state or state not in active_states:
+    raise HTTPException(status_code=400, detail="State inválido. Posible ataque CSRF.")
+active_states.pop(state, None)  # Eliminar después de usar
+```
+
+**⚠️ Nota para producción**: El almacenamiento en memoria (`active_states: dict`) funciona para desarrollo, pero en producción deberías usar Redis con TTL automático para soportar múltiples instancias del servidor.
+
+---
 
 ### ⚠️ Almacenamiento de Tokens
 
@@ -324,13 +358,15 @@ source .venv/bin/activate  # Linux/Mac
 # Instalar dependencias
 pip install -r requirements.txt
 
-# Iniciar servidor
+# Iniciar servidor (construye frontend automáticamente)
 python start.py
 ```
 
-El servidor estará disponible en: **http://localhost:8001**
+El servidor estará disponible en: **http://localhost:8002**
 
-Documentación interactiva (Swagger): **http://localhost:8001/docs**
+Documentación interactiva (Swagger): **http://localhost:8002/docs**
+
+**Nota**: El script `start.py` automáticamente construye el frontend de Ionic antes de iniciar el servidor backend.
 
 ---
 
@@ -358,8 +394,9 @@ type .env | findstr QUICKBOOKS  # Windows
 **Causa:** El access token de QuickBooks tiene una validez de 1 hora.
 
 **Solución actual:** Vuelve a ejecutar el flujo de autenticación:
-1. Ve a `http://localhost:8001/api/v1/auth/login`
+1. Ve a `http://localhost:8002/api/v1/auth/login`
 2. Autoriza nuevamente en QuickBooks
+3. Serás redirigido automáticamente a `/`
 
 **Mejora futura:** Implementar refresh token automático.
 
@@ -370,23 +407,27 @@ type .env | findstr QUICKBOOKS  # Windows
 **Causa:** No has completado el flujo de autenticación.
 
 **Solución:**
-1. Abre en tu navegador: `http://localhost:8001/api/v1/auth/login`
+1. Abre en tu navegador: `http://localhost:8002/api/v1/auth/login`
 2. Autoriza la aplicación en QuickBooks
-3. Espera la redirección al callback
-4. Verifica el estado: `http://localhost:8001/api/v1/auth/status`
+3. Espera la redirección automática a `/`
+4. Verifica el estado: `http://localhost:8002/api/v1/auth/status`
 
 ---
 
-### ❌ Error: "Redirect URI mismatch"
+### ❌ Error: "Redirect URI mismatch" o "redirect_uri no es válido"
 
-**Causa:** La URI de redirección no coincide con la configurada en QuickBooks.
+**Causa:** La URI de redirección no coincide **exactamente** con la configurada en QuickBooks.
 
 **Solución:**
 1. Ve a [Intuit Developer Dashboard](https://developer.intuit.com/app/developer/dashboard)
 2. Selecciona tu aplicación
-3. Ve a "Keys & OAuth"
-4. Agrega la URI: `http://localhost:8001/api/v1/auth/callback`
-5. Asegúrate que coincida exactamente con `QUICKBOOKS_REDIRECT_URI` en `.env`
+3. Ve a "Keys & credentials" → "Redirect URIs"
+4. Agrega EXACTAMENTE estas URIs:
+   - **Desarrollo**: `http://localhost:8002/v1/auth/callback`
+   - **Producción**: `https://tu-dominio.com/v1/auth/callback`
+5. Asegúrate que coincida **exactamente** con `QUICKBOOKS_REDIRECT_URI` en `.env`
+6. **Importante**: No incluyas `/api` en el path, solo `/v1/auth/callback`
+7. Reinicia el servidor después de cambiar `.env`
 
 ---
 
@@ -396,7 +437,7 @@ type .env | findstr QUICKBOOKS  # Windows
 
 1. **Token válido:**
    ```bash
-   curl http://localhost:8001/api/v1/auth/status
+   curl http://localhost:8002/api/v1/auth/status
    ```
 
 2. **Company ID correcto:**
@@ -409,6 +450,28 @@ type .env | findstr QUICKBOOKS  # Windows
    - Ve a tu app en Intuit Developer Portal
    - Verifica que tenga acceso a "Accounting" scope
    - Re-autoriza si es necesario
+
+---
+
+### ❌ Error: "Connection closed" en callback
+
+**Causa:** (Corregido en v1.1) El cliente HTTP de aiohttp cerraba la conexión antes de leer la respuesta.
+
+**Solución aplicada:**
+El `HTTPClient` ahora lee el contenido completo antes de cerrar la sesión:
+
+```python
+# En http_request.py
+async with session.request(...) as response:
+    # Leer antes de cerrar
+    response_content = await response.read()
+    return ResponseWrapper(response.status, response.headers, response_content)
+```
+
+Si aún ves este error:
+1. Asegúrate de tener la última versión del código
+2. Verifica que `app/core/http_request.py` incluya la corrección
+3. Reinicia el servidor
 
 ---
 

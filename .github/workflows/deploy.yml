@@ -93,7 +93,20 @@ jobs:
 
       - name: Health Check
         run: |
-          echo "🏥 Esperando 30 segundos para que el servicio inicie..."
-          sleep 30
           echo "🏥 Verificando salud del servicio..."
-          curl -f https://gas.ezekl.com/api/v1/health || echo "⚠️ Health check falló, pero el despliegue continuó"
+          max_attempts=15
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "Intento $attempt de $max_attempts..."
+            if curl -f -s https://gas.ezekl.com/api/v1/health > /dev/null 2>&1; then
+              echo "✅ Servicio está funcionando correctamente!"
+              exit 0
+            fi
+            echo "⏳ Esperando 2 segundos antes del siguiente intento..."
+            sleep 2
+            attempt=$((attempt + 1))
+          done
+          
+          echo "⚠️ Health check falló después de $max_attempts intentos"
+          exit 1

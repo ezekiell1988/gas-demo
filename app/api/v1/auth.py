@@ -138,14 +138,8 @@ async def oauth_callback(
             redirect_uri=oauth_config.redirect_uri
         )
         
-        return {
-            "status": "success",
-            "message": "Autenticación exitosa",
-            "realm_id": realmId,
-            "access_token": token_data.get("access_token"),
-            "refresh_token": token_data.get("refresh_token"),
-            "expires_in": token_data.get("expires_in")
-        }
+        logger.info("✅ Autenticación exitosa, redirigiendo a /")
+        return RedirectResponse(url="/", status_code=302)
     except Exception as e:
         logger.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
