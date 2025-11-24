@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 import logging
+import secrets
 
 from app.utils.quickbooks_auth import quickbooks_auth
 from app.core.settings import settings
@@ -48,6 +49,9 @@ def get_oauth_config() -> Optional[OAuthConfig]:
 # Inicializar configuración OAuth al arrancar
 oauth_config: Optional[OAuthConfig] = get_oauth_config()
 
+# Almacenar state para validación CSRF (en producción usar Redis o base de datos)
+active_states: dict = {}
+
 
 @router.get(
     "/auth/login",
@@ -59,9 +63,10 @@ async def login():
     """
     Inicia el flujo de autenticación OAuth2 con QuickBooks.
     
-    **Abre este endpoint en tu navegador:** http://localhost:8001/api/v1/auth/login
+    **Abre este endpoint en tu navegador:** http://localhost:8002/api/v1/auth/login
     
     Redirige a QuickBooks para autorización.
+    Genera un state aleatorio para prevenir ataques CSRF.
     """
     if not oauth_config:
         raise HTTPException(
@@ -69,13 +74,18 @@ async def login():
             detail="OAuth2 no configurado. Verifica QUICKBOOKS_CLIENT_ID y QUICKBOOKS_CLIENT_SECRET en .env"
         )
     
+    # Generar state aleatorio seguro para prevenir CSRF
+    state = secrets.token_urlsafe(32)
+    active_states[state] = True
+    
     auth_url = await quickbooks_auth.get_authorization_url(
         client_id=oauth_config.client_id,
         redirect_uri=oauth_config.redirect_uri,
-        state="random_state_string"
+        state=state
     )
     
     logger.info(f"🚀 Redirigiendo a QuickBooks: {auth_url}")
+    logger.info(f"🔐 State generado: {state}")
     return RedirectResponse(url=auth_url)
 
 
@@ -93,20 +103,32 @@ async def oauth_callback(
 ):
     """
     Callback de OAuth2 desde QuickBooks (automático).
+    Valida el state para prevenir ataques CSRF según la documentación oficial.
     """
     if error:
         logger.error(f"❌ Error OAuth: {error}")
-        raise HTTPException(status_code=400, detail=f"Error: {error}")
+        raise HTTPException(status_code=400, detail=f"Error OAuth: {error}")
     
     if not code:
-        raise HTTPException(status_code=400, detail="Código no recibido")
+        raise HTTPException(status_code=400, detail="Código de autorización no recibido")
+    
+    # Validar state para prevenir CSRF
+    if not state or state not in active_states:
+        logger.error(f"❌ State inválido o no encontrado: {state}")
+        raise HTTPException(
+            status_code=400,
+            detail="State inválido. Posible ataque CSRF. Inicie el proceso de login nuevamente."
+        )
+    
+    # Remover state usado (un solo uso)
+    active_states.pop(state, None)
     
     if not oauth_config:
         raise HTTPException(status_code=400, detail="OAuth2 no configurado")
     
     if realmId:
         quickbooks_auth.realm_id = realmId
-        logger.info(f"Company ID: {realmId}")
+        logger.info(f"✅ Company ID (realmId): {realmId}")
     
     try:
         token_data = await quickbooks_auth.exchange_code_for_token(

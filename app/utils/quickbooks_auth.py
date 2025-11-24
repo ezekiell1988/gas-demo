@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import base64
 import json
+from urllib.parse import urlencode
 
 from app.core.settings import settings
 from app.core.http_request import HTTPClient
@@ -61,19 +62,25 @@ class QuickBooksAuth:
         client_id: str,
         redirect_uri: str,
         state: Optional[str] = None,
-        scope: str = "com.intuit.quickbooks.accounting"
+        scope: str = "com.intuit.quickbooks.accounting openid profile email phone address"
     ) -> str:
         """
         Genera la URL de autorización para redirigir al usuario.
         
+        Según la documentación oficial de QuickBooks OAuth 2.0:
+        https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
+        
         Args:
             client_id: ID del cliente de QuickBooks
             redirect_uri: URI de redirección después de la autorización
-            state: Estado opcional para prevenir CSRF
-            scope: Alcance de permisos solicitados
+            state: Estado para prevenir CSRF (recomendado)
+            scope: Alcance de permisos solicitados. Debe incluir:
+                   - com.intuit.quickbooks.accounting (acceso a datos contables)
+                   - openid (requerido para OpenID Connect)
+                   - profile, email, phone, address (información del usuario, opcional)
             
         Returns:
-            URL completa de autorización
+            URL completa de autorización con parámetros correctamente codificados
         """
         params = {
             "client_id": client_id,
@@ -83,7 +90,8 @@ class QuickBooksAuth:
             "state": state or ""
         }
         
-        query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        # Usar urlencode para codificar correctamente los parámetros según RFC 3986
+        query_string = urlencode(params)
         return f"{self.auth_url}?{query_string}"
     
     async def exchange_code_for_token(

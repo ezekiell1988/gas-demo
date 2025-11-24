@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Script de inicio para el proyecto voice-bot.
+Script de inicio para el proyecto gas-demo.
 Ejecuta el build del frontend y luego inicia el servidor backend.
 """
 import subprocess
@@ -9,7 +9,7 @@ import os
 
 # Activar el entorno virtual si no está activo
 def activate_venv():
-    """Activa el entorno virtual si no está ya activo."""
+    """Activa el entorno virtual si no está ya activo. Lo crea si no existe."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Determinar el ejecutable de Python según el sistema operativo
@@ -18,12 +18,26 @@ def activate_venv():
     else:
         venv_python = os.path.join(base_dir, ".venv", "bin", "python")
     
-    # Verificar que el entorno virtual existe
+    # Verificar que el entorno virtual existe, si no, crearlo
     if not os.path.exists(venv_python):
-        print("❌ Error: No se encontró el entorno virtual", file=sys.stderr)
-        print(f"Esperado en: {venv_python}", file=sys.stderr)
-        print("Crea el entorno virtual ejecutando: python -m venv .venv")
-        sys.exit(1)
+        print("⚠️  No se encontró el entorno virtual", file=sys.stderr)
+        print(f"📦 Creando entorno virtual en: {os.path.join(base_dir, '.venv')}")
+        
+        try:
+            # Crear el entorno virtual
+            subprocess.run([sys.executable, "-m", "venv", ".venv"], cwd=base_dir, check=True)
+            print("✅ Entorno virtual creado exitosamente")
+            
+            # Instalar dependencias
+            print("📦 Instalando dependencias...")
+            pip_executable = venv_python.replace("python.exe" if sys.platform == "win32" else "python", 
+                                                 "pip.exe" if sys.platform == "win32" else "pip")
+            subprocess.run([pip_executable, "install", "-r", "requirements.txt"], cwd=base_dir, check=True)
+            print("✅ Dependencias instaladas exitosamente")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error al crear el entorno virtual: {e}", file=sys.stderr)
+            sys.exit(1)
     
     # Si no estamos usando el Python del entorno virtual, reiniciar con él
     if sys.executable != venv_python:
@@ -66,7 +80,7 @@ def main():
     chat_bot_dir = os.path.join(base_dir, frontend_path)
     
     print("=" * 60)
-    print("🚀 Iniciando Voice Bot")
+    print("🚀 Iniciando GAS Demo")
     print("=" * 60)
     print(f"🐍 Usando Python: {python_executable}")
     print(f"📁 Frontend: {frontend_path}")
