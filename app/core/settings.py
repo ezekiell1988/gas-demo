@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     allow_origins: str = "http://localhost:8001,http://127.0.0.1:8001"
     
+    # QuickBooks API Configuration
+    quickbooks_client_id: str = ""
+    quickbooks_client_secret: str = ""
+    quickbooks_redirect_uri: str = "http://localhost:8001/api/v1/auth/callback"
+    quickbooks_company_id: str = ""
+    quickbooks_base_url: str = "https://sandbox-quickbooks.api.intuit.com/v3"
+    quickbooks_environment: str = "sandbox"
+    
     @property
     def origins_list(self) -> List[str]:
         """Convierte la cadena de orígenes separada por comas en una lista."""
