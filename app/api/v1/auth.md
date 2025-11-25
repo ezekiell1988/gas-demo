@@ -27,12 +27,18 @@ Este módulo implementa la autenticación OAuth2 con QuickBooks Online API para 
 Configura las siguientes variables en tu archivo `.env`:
 
 ```env
+# Configuración del servidor
+PORT=8002  # Puerto donde correrá el servidor (configurable)
+
+# Configuración de QuickBooks
 QUICKBOOKS_CLIENT_ID=tu_client_id
 QUICKBOOKS_CLIENT_SECRET=tu_client_secret
 QUICKBOOKS_REDIRECT_URI=http://localhost:8002/v1/auth/callback
 QUICKBOOKS_COMPANY_ID=tu_company_id
 QUICKBOOKS_BASE_URL=https://sandbox-quickbooks.api.intuit.com/v3
 ```
+
+**Nota:** El puerto por defecto es 8002, pero puedes cambiarlo modificando la variable `PORT` en el archivo `.env`.
 
 ## 🔄 Flujo de Autenticación OAuth2
 
@@ -43,6 +49,8 @@ Abre en tu navegador:
 ```
 GET http://localhost:8002/api/v1/auth/login
 ```
+
+**Nota:** Reemplaza `8002` con el puerto configurado en tu variable de entorno `PORT`.
 
 Esto:
 1. Genera un `state` aleatorio seguro (protección CSRF)
@@ -450,7 +458,7 @@ pip install -r requirements.txt
 python start.py
 ```
 
-El servidor estará disponible en: **http://localhost:8002**
+El servidor estará disponible en: **http://localhost:8002** (o el puerto configurado en `PORT`)
 
 Documentación interactiva (Swagger): **http://localhost:8002/docs**
 

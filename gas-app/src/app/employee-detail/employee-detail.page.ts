@@ -1,15 +1,11 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { HeaderComponent } from '../components';
 import {
-  IonHeader,
-  IonToolbar,
-  IonTitle,
   IonContent,
   IonButton,
   IonIcon,
-  IonButtons,
   IonBackButton,
   IonList,
   IonItem,
@@ -30,15 +26,11 @@ import { Employee } from '../models';
   templateUrl: './employee-detail.page.html',
   standalone: true,
   imports: [
-    CommonModule,
     ReactiveFormsModule,
-    IonHeader,
-    IonToolbar,
-    IonTitle,
+    HeaderComponent,
     IonContent,
     IonButton,
     IonIcon,
-    IonButtons,
     IonBackButton,
     IonList,
     IonItem,
@@ -50,6 +42,12 @@ import { Employee } from '../models';
   ]
 })
 export class EmployeeDetailPage implements OnInit {
+  private fb = inject(FormBuilder);
+  private employeeService = inject(EmployeeService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private toastController = inject(ToastController);
+
   employeeForm: FormGroup;
   loading = false;
   saving = false;
@@ -57,13 +55,7 @@ export class EmployeeDetailPage implements OnInit {
   employeeId: string | null = null;
   currentEmployee: Employee | null = null;
 
-  constructor(
-    private fb: FormBuilder,
-    private employeeService: EmployeeService,
-    private route: ActivatedRoute,
-    private router: Router,
-    private toastController: ToastController
-  ) {
+  constructor() {
     addIcons({ save, arrowBack });
 
     this.employeeForm = this.fb.group({
@@ -81,8 +73,7 @@ export class EmployeeDetailPage implements OnInit {
       PostalCode: [''],
       EmployeeNumber: ['', Validators.maxLength(100)],
       Gender: [''],
-      HiredDate: [''],
-      Active: [true]
+      HiredDate: ['']
     });
   }
 
@@ -130,8 +121,7 @@ export class EmployeeDetailPage implements OnInit {
       PostalCode: employee.PrimaryAddr?.PostalCode || '',
       EmployeeNumber: employee.EmployeeNumber || '',
       Gender: employee.Gender || '',
-      HiredDate: employee.HiredDate || '',
-      Active: employee.Active !== false
+      HiredDate: employee.HiredDate || ''
     });
   }
 
@@ -165,15 +155,16 @@ export class EmployeeDetailPage implements OnInit {
         } : undefined,
         EmployeeNumber: formValue.EmployeeNumber || undefined,
         Gender: formValue.Gender || undefined,
-        HiredDate: formValue.HiredDate || undefined,
-        Active: formValue.Active
+        HiredDate: formValue.HiredDate || undefined
       };
 
       this.employeeService.updateEmployee(this.employeeId!, employeeData).subscribe({
         next: (response) => {
           this.showToast('Empleado actualizado exitosamente', 'success');
           this.saving = false;
-          this.router.navigate(['/employees']);
+          this.router.navigate(['/employees'], {
+            state: { updatedEmployee: response.employee }
+          });
         },
         error: (err) => {
           console.error('Error al actualizar:', err);
@@ -202,14 +193,16 @@ export class EmployeeDetailPage implements OnInit {
         EmployeeNumber: formValue.EmployeeNumber || undefined,
         Gender: formValue.Gender || undefined,
         HiredDate: formValue.HiredDate || undefined,
-        Active: formValue.Active
+        Active: true
       };
 
       this.employeeService.createEmployee(employeeData).subscribe({
         next: (response) => {
           this.showToast('Empleado creado exitosamente', 'success');
           this.saving = false;
-          this.router.navigate(['/employees']);
+          this.router.navigate(['/employees'], {
+            state: { newEmployee: response.employee }
+          });
         },
         error: (err) => {
           console.error('Error al crear:', err);

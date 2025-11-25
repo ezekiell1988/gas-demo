@@ -1,9 +1,6 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { HeaderComponent } from '../components';
 import {
-  IonHeader,
-  IonToolbar,
-  IonTitle,
   IonContent,
   IonCard,
   IonCardHeader,
@@ -12,6 +9,7 @@ import {
   IonCardSubtitle,
   IonButton,
   IonButtons,
+  IonMenuButton,
   IonIcon,
   IonBadge,
   IonChip,
@@ -23,6 +21,7 @@ import {
   IonCol,
   IonList,
   IonNote,
+  IonText,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
@@ -51,11 +50,9 @@ import { AuthStatus } from '../models';
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
+  standalone: true,
   imports: [
-    CommonModule,
-    IonHeader,
-    IonToolbar,
-    IonTitle,
+    HeaderComponent,
     IonContent,
     IonCard,
     IonCardHeader,
@@ -63,7 +60,6 @@ import { AuthStatus } from '../models';
     IonCardContent,
     IonCardSubtitle,
     IonButton,
-    IonButtons,
     IonIcon,
     IonBadge,
     IonChip,
@@ -75,15 +71,18 @@ import { AuthStatus } from '../models';
     IonCol,
     IonList,
     IonNote,
+    IonText,
   ],
 })
 export class HomePage implements OnInit {
+  private authService = inject(AuthService);
+
   authStatus: AuthStatus | null = null;
   loading = true;
   hasCookie = false;
   loggedOut = false;
 
-  constructor(private authService: AuthService) {
+  constructor() {
     addIcons({
       checkmarkCircle,
       closeCircle,

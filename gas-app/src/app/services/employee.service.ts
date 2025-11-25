@@ -11,10 +11,20 @@ export class EmployeeService {
 
   constructor(private http: HttpClient) {}
 
-  getEmployees(active?: boolean, limit: number = 100): Observable<EmployeeResponse> {
-    let url = `${this.apiUrl}/employees?limit=${limit}`;
+  getEmployees(
+    active?: boolean,
+    limit: number = 5,
+    offset: number = 0,
+    search?: string,
+    orderBy: string = 'GivenName',
+    orderDir: string = 'ASC'
+  ): Observable<EmployeeResponse> {
+    let url = `${this.apiUrl}/employees?limit=${limit}&offset=${offset}&order_by=${orderBy}&order_dir=${orderDir}`;
     if (active !== undefined) {
       url += `&active=${active}`;
+    }
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`;
     }
     return this.http.get<EmployeeResponse>(url, { withCredentials: true });
   }

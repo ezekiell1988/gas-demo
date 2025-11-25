@@ -1,204 +1,220 @@
-<ion-header [translucent]="true" class="ion-no-border">
-  <ion-toolbar color="primary">
-    <ion-title>
-      <div class="header-title">
-        <ion-icon name="shield-checkmark-outline"></ion-icon>
-        <span>QuickBooks Dashboard</span>
-      </div>
-    </ion-title>
-    <ion-buttons slot="end">
-      <ion-button (click)="refresh()">
-        <ion-icon slot="icon-only" name="refresh-outline"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-  </ion-toolbar>
-</ion-header>
+<app-header title="QuickBooks Dashboard">
+  <ion-button slot="end" (click)="refresh()">
+    <ion-icon slot="icon-only" name="refresh-outline"></ion-icon>
+  </ion-button>
+</app-header>
 
-<ion-content [fullscreen]="true" class="ion-padding">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Dashboard</ion-title>
-    </ion-toolbar>
-  </ion-header>
+<ion-content class="ion-padding">
 
   <!-- Loading State -->
   @if (loading) {
-  <div class="loading-state">
-    <ion-card class="loading-card">
-      <ion-card-content class="ion-text-center">
-        <ion-spinner name="crescent" color="primary"></ion-spinner>
-        <h3>Cargando información</h3>
-        <p>Por favor espera un momento...</p>
-      </ion-card-content>
-    </ion-card>
-  </div>
+  <ion-grid class="ion-padding">
+    <ion-row class="ion-justify-content-center ion-align-items-center" style="min-height: 60vh;">
+      <ion-col size="12" size-md="6" size-lg="4">
+        <ion-card>
+          <ion-card-content class="ion-text-center ion-padding">
+            <ion-spinner name="crescent" color="primary" style="transform: scale(1.5); margin-bottom: 24px;"></ion-spinner>
+            <h3 class="ion-no-margin ion-margin-bottom">Cargando información</h3>
+            <p class="ion-no-margin" color="medium">Por favor espera un momento...</p>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
   }
 
   <!-- Logged Out State -->
   @if (!loading && loggedOut) {
-  <div class="logout-state">
-    <ion-card class="logout-card">
-      <ion-card-content class="ion-text-center">
-        <div class="icon-container success">
-          <ion-icon name="checkmark-circle" color="success"></ion-icon>
-        </div>
-        <h2>Sesión Cerrada</h2>
-        <p class="subtitle">
-          Has cerrado sesión exitosamente en QuickBooks
-        </p>
-        <ion-button (click)="relogin()" color="primary" expand="block" size="large" shape="round">
-          <ion-icon slot="start" name="log-in-outline"></ion-icon>
-          Iniciar Sesión Nuevamente
-        </ion-button>
-      </ion-card-content>
-    </ion-card>
-  </div>
+  <ion-grid class="ion-padding">
+    <ion-row class="ion-justify-content-center ion-align-items-center" style="min-height: 60vh;">
+      <ion-col size="12" size-md="8" size-lg="6">
+        <ion-card>
+          <ion-card-content class="ion-text-center ion-padding">
+            <ion-icon name="checkmark-circle" color="success" style="font-size: 80px; margin-bottom: 24px;"></ion-icon>
+            <h2 class="ion-no-margin ion-margin-bottom">Sesión Cerrada</h2>
+            <p class="ion-no-margin ion-margin-bottom" color="medium">
+              Has cerrado sesión exitosamente en QuickBooks
+            </p>
+            <ion-button (click)="relogin()" color="primary" expand="block" size="large" shape="round" class="ion-margin-top">
+              <ion-icon slot="start" name="log-in-outline"></ion-icon>
+              Iniciar Sesión Nuevamente
+            </ion-button>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
   }
 
   <!-- Auth Status -->
   @if (!loading && !loggedOut && authStatus) {
-  <div class="content-wrapper">
+  <ion-grid class="ion-padding" style="max-width: 900px; margin: 0 auto;">
     <!-- Hero Section -->
-    <div class="hero-section">
-      <div class="status-badge" [class.active]="authStatus.authenticated">
-        <ion-icon [name]="authStatus.authenticated ? 'checkmark-circle' : 'close-circle'"></ion-icon>
-        <span>{{ authStatus.authenticated ? 'Conectado' : 'Desconectado' }}</span>
-      </div>
-      <h1 class="ion-text-center">Estado de Autenticación</h1>
-      <p class="ion-text-center subtitle">Gestiona tu conexión con QuickBooks</p>
-    </div>
+    <ion-row class="ion-justify-content-center ion-margin-bottom">
+      <ion-col size="12" class="ion-text-center ion-padding">
+        <ion-badge [color]="authStatus.authenticated ? 'success' : 'danger'" style="padding: 10px 20px; font-size: 14px;">
+          <ion-icon [name]="authStatus.authenticated ? 'checkmark-circle' : 'close-circle'" style="margin-right: 6px;"></ion-icon>
+          {{ authStatus.authenticated ? 'Conectado' : 'Desconectado' }}
+        </ion-badge>
+        <h1 class="ion-margin-top">Estado de Autenticación</h1>
+        <p color="medium">Gestiona tu conexión con QuickBooks</p>
+      </ion-col>
+    </ion-row>
 
     <!-- Quick Stats -->
-    <ion-grid>
-      <ion-row>
-        <ion-col size="12" size-md="6">
-          <ion-card class="stat-card" [class.success]="authStatus.authenticated">
-            <ion-card-content>
-              <div class="stat-icon">
-                <ion-icon [name]="authStatus.authenticated ? 'shield-checkmark' : 'shield-outline'"
-                          [color]="authStatus.authenticated ? 'success' : 'medium'"></ion-icon>
-              </div>
-              <h3>Estado de Sesión</h3>
-              <p class="stat-value">{{ authStatus.authenticated ? 'Autenticado' : 'No autenticado' }}</p>
-              <ion-badge [color]="authStatus.authenticated ? 'success' : 'danger'">
-                {{ authStatus.authenticated ? 'Activo' : 'Inactivo' }}
-              </ion-badge>
-            </ion-card-content>
-          </ion-card>
-        </ion-col>
+    <ion-row class="ion-margin-bottom">
+      <ion-col size="12" size-md="6">
+        <ion-card [color]="authStatus.authenticated ? 'light' : undefined">
+          <ion-card-content class="ion-padding">
+            <ion-icon
+              [name]="authStatus.authenticated ? 'shield-checkmark' : 'shield-outline'"
+              [color]="authStatus.authenticated ? 'success' : 'medium'"
+              style="font-size: 48px; margin-bottom: 16px; display: block;">
+            </ion-icon>
+            <ion-text color="medium">
+              <small><strong>ESTADO DE SESIÓN</strong></small>
+            </ion-text>
+            <h2 class="ion-no-margin ion-margin-top ion-margin-bottom">
+              {{ authStatus.authenticated ? 'Autenticado' : 'No autenticado' }}
+            </h2>
+            <ion-badge [color]="authStatus.authenticated ? 'success' : 'danger'">
+              {{ authStatus.authenticated ? 'Activo' : 'Inactivo' }}
+            </ion-badge>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
 
-        <ion-col size="12" size-md="6">
-          <ion-card class="stat-card" [class.warning]="!authStatus.token_valid">
-            <ion-card-content>
-              <div class="stat-icon">
-                <ion-icon [name]="authStatus.token_valid ? 'key' : 'key-outline'"
-                          [color]="authStatus.token_valid ? 'success' : 'warning'"></ion-icon>
-              </div>
-              <h3>Token de Acceso</h3>
-              <p class="stat-value">{{ authStatus.token_valid ? 'Válido' : 'Expirado' }}</p>
-              <ion-badge [color]="authStatus.token_valid ? 'success' : 'warning'">
-                {{ getExpiresIn() }}
-              </ion-badge>
-            </ion-card-content>
-          </ion-card>
-        </ion-col>
-      </ion-row>
-    </ion-grid>
+      <ion-col size="12" size-md="6">
+        <ion-card [color]="authStatus.token_valid ? 'light' : undefined">
+          <ion-card-content class="ion-padding">
+            <ion-icon
+              [name]="authStatus.token_valid ? 'key' : 'key-outline'"
+              [color]="authStatus.token_valid ? 'success' : 'warning'"
+              style="font-size: 48px; margin-bottom: 16px; display: block;">
+            </ion-icon>
+            <ion-text color="medium">
+              <small><strong>TOKEN DE ACCESO</strong></small>
+            </ion-text>
+            <h2 class="ion-no-margin ion-margin-top ion-margin-bottom">
+              {{ authStatus.token_valid ? 'Válido' : 'Expirado' }}
+            </h2>
+            <ion-badge [color]="authStatus.token_valid ? 'success' : 'warning'">
+              {{ getExpiresIn() }}
+            </ion-badge>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
 
     <!-- Detailed Information -->
-    <ion-card class="detail-card">
-      <ion-card-header>
-        <ion-card-subtitle>
-          <ion-icon name="information-circle-outline"></ion-icon>
-          Información Detallada
-        </ion-card-subtitle>
-        <ion-card-title>Detalles de la Sesión</ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <ion-list class="detail-list">
-          <ion-item lines="full">
-            <ion-icon name="business-outline" slot="start" color="primary"></ion-icon>
-            <ion-label>
-              <h3>Company ID</h3>
-              <p>Identificador único de QuickBooks</p>
-            </ion-label>
-            <ion-chip slot="end" color="primary">
-              <ion-label>{{ authStatus.realm_id || 'N/A' }}</ion-label>
-            </ion-chip>
-          </ion-item>
+    <ion-row class="ion-margin-bottom">
+      <ion-col size="12">
+        <ion-card>
+          <ion-card-header>
+            <ion-card-subtitle color="primary">
+              <ion-icon name="information-circle-outline" style="vertical-align: middle; margin-right: 4px;"></ion-icon>
+              INFORMACIÓN DETALLADA
+            </ion-card-subtitle>
+            <ion-card-title>Detalles de la Sesión</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <ion-list lines="full" class="ion-no-padding">
+              <ion-item>
+                <ion-icon name="business-outline" slot="start" color="primary"></ion-icon>
+                <ion-label>
+                  <h3>Company ID</h3>
+                  <p>Identificador único de QuickBooks</p>
+                </ion-label>
+                <ion-chip slot="end" color="primary">
+                  <ion-label>{{ authStatus.realm_id || 'N/A' }}</ion-label>
+                </ion-chip>
+              </ion-item>
 
-          <ion-item lines="full">
-            <ion-icon name="time-outline" slot="start" color="tertiary"></ion-icon>
-            <ion-label>
-              <h3>Tiempo de Expiración</h3>
-              <p>Tiempo restante del token de acceso</p>
-            </ion-label>
-            <ion-chip slot="end" [color]="authStatus.token_valid ? 'success' : 'danger'">
-              <ion-icon name="hourglass-outline"></ion-icon>
-              <ion-label>{{ getExpiresIn() }}</ion-label>
-            </ion-chip>
-          </ion-item>
+              <ion-item>
+                <ion-icon name="time-outline" slot="start" color="tertiary"></ion-icon>
+                <ion-label>
+                  <h3>Tiempo de Expiración</h3>
+                  <p>Tiempo restante del token de acceso</p>
+                </ion-label>
+                <ion-chip slot="end" [color]="authStatus.token_valid ? 'success' : 'danger'">
+                  <ion-icon name="hourglass-outline"></ion-icon>
+                  <ion-label>{{ getExpiresIn() }}</ion-label>
+                </ion-chip>
+              </ion-item>
 
-          <ion-item lines="none">
-            <ion-icon name="lock-closed-outline" slot="start" color="secondary"></ion-icon>
-            <ion-label>
-              <h3>Cookie de Sesión</h3>
-              <p>Seguridad HttpOnly habilitada</p>
-            </ion-label>
-            <ion-chip slot="end" [color]="hasCookie ? 'success' : 'danger'">
-              <ion-icon [name]="hasCookie ? 'checkmark' : 'close'"></ion-icon>
-              <ion-label>{{ hasCookie ? 'Presente' : 'Ausente' }}</ion-label>
-            </ion-chip>
-          </ion-item>
-        </ion-list>
+              <ion-item lines="none">
+                <ion-icon name="lock-closed-outline" slot="start" color="secondary"></ion-icon>
+                <ion-label>
+                  <h3>Cookie de Sesión</h3>
+                  <p>Seguridad HttpOnly habilitada</p>
+                </ion-label>
+                <ion-chip slot="end" [color]="hasCookie ? 'success' : 'danger'">
+                  <ion-icon [name]="hasCookie ? 'checkmark' : 'close'"></ion-icon>
+                  <ion-label>{{ hasCookie ? 'Presente' : 'Ausente' }}</ion-label>
+                </ion-chip>
+              </ion-item>
+            </ion-list>
 
-        <ion-note class="security-note">
-          <ion-icon name="shield-outline"></ion-icon>
-          <span>
-            Tu sesión está protegida con cookies HttpOnly y firmadas con itsdangerous.
-            Los tokens se envían automáticamente en cada petición de forma segura.
-          </span>
-        </ion-note>
-      </ion-card-content>
-    </ion-card>
+            <ion-note color="secondary" class="ion-padding ion-margin-top" style="display: flex; align-items: start; gap: 12px; background: var(--ion-color-light); border-radius: 8px; border-left: 4px solid var(--ion-color-secondary);">
+              <ion-icon name="shield-outline" style="font-size: 20px; flex-shrink: 0; margin-top: 2px;"></ion-icon>
+              <span style="line-height: 1.6;">
+                Tu sesión está protegida con cookies HttpOnly y firmadas con itsdangerous.
+                Los tokens se envían automáticamente en cada petición de forma segura.
+              </span>
+            </ion-note>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
 
     <!-- Action Buttons -->
-    <div class="action-buttons">
-      <ion-button
-        (click)="refreshToken()"
-        expand="block"
-        [disabled]="!authStatus.token_valid"
-        color="success"
-        shape="round">
-        <ion-icon slot="start" name="sync-outline"></ion-icon>
-        Renovar Token de Acceso
-      </ion-button>
+    <ion-row class="ion-margin-bottom">
+      <ion-col size="12">
+        <ion-button
+          (click)="refreshToken()"
+          expand="block"
+          [disabled]="!authStatus.token_valid"
+          color="success"
+          shape="round"
+          size="large"
+          class="ion-margin-bottom">
+          <ion-icon slot="start" name="sync-outline"></ion-icon>
+          Renovar Token de Acceso
+        </ion-button>
 
-      <ion-button
-        (click)="refresh()"
-        expand="block"
-        fill="outline"
-        color="primary"
-        shape="round">
-        <ion-icon slot="start" name="refresh-outline"></ion-icon>
-        Actualizar Estado
-      </ion-button>
+        <ion-button
+          (click)="refresh()"
+          expand="block"
+          fill="outline"
+          color="primary"
+          shape="round"
+          size="large"
+          class="ion-margin-bottom">
+          <ion-icon slot="start" name="refresh-outline"></ion-icon>
+          Actualizar Estado
+        </ion-button>
 
-      <ion-button
-        (click)="logout()"
-        expand="block"
-        color="danger"
-        shape="round">
-        <ion-icon slot="start" name="log-out-outline"></ion-icon>
-        Cerrar Sesión
-      </ion-button>
-    </div>
+        <ion-button
+          (click)="logout()"
+          expand="block"
+          color="danger"
+          shape="round"
+          size="large">
+          <ion-icon slot="start" name="log-out-outline"></ion-icon>
+          Cerrar Sesión
+        </ion-button>
+      </ion-col>
+    </ion-row>
 
     <!-- Footer Info -->
-    <div class="footer-info ion-text-center">
-      <ion-icon name="information-circle-outline" color="medium"></ion-icon>
-      <p>Última actualización: {{ getCurrentTime() }}</p>
-    </div>
-  </div>
+    <ion-row>
+      <ion-col size="12" class="ion-text-center ion-padding">
+        <ion-icon name="information-circle-outline" color="medium" style="font-size: 20px; margin-bottom: 8px;"></ion-icon>
+        <p class="ion-no-margin" color="medium">
+          <small>Última actualización: {{ getCurrentTime() }}</small>
+        </p>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
   }
 </ion-content>

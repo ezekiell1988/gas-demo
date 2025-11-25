@@ -6,7 +6,7 @@ Maneja la creación, lectura, actualización y eliminación de empleados.
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging
 import json
 
@@ -21,6 +21,19 @@ router = APIRouter()
 
 # Importar user_sessions y serializer desde auth.py
 from app.api.v1.auth import user_sessions, serializer
+
+
+# Helper para convertir fechas a string en el formato correcto
+def convert_dates_to_string(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convierte objetos date y datetime a strings en formato ISO."""
+    for key, value in data.items():
+        if isinstance(value, (date, datetime)):
+            data[key] = value.isoformat() if isinstance(value, datetime) else value.strftime('%Y-%m-%d')
+        elif isinstance(value, dict):
+            data[key] = convert_dates_to_string(value)
+        elif isinstance(value, list):
+            data[key] = [convert_dates_to_string(item) if isinstance(item, dict) else item for item in value]
+    return data
 
 
 # Helper para procesar errores de QuickBooks
@@ -97,28 +110,54 @@ async def get_session_data(request: Request) -> Dict[str, Any]:
     "/employees",
     tags=["Employees"],
     summary="Listar empleados",
-    description="Obtiene la lista completa de empleados desde QuickBooks con opciones de filtrado por estado activo y límite de resultados."
+    description="Obtiene la lista completa de empleados desde QuickBooks con opciones de filtrado por estado activo, búsqueda, ordenamiento, límite de resultados y offset para paginación."
 )
 async def get_all_employees(
     request: Request,
     active: Optional[bool] = None,
-    limit: int = 100
+    search: Optional[str] = None,
+    order_by: Optional[str] = "GivenName",
+    order_dir: Optional[str] = "ASC",
+    limit: int = 5,
+    offset: int = 0
 ):
     """
     Obtiene la lista de empleados desde QuickBooks.
     
-    **Query de ejemplo:**
+    **Parámetros Query:**
+    - active (bool): Filtrar por empleados activos/inactivos
+    - search (str): Buscar en nombre, apellido o display name
+    - order_by (str): Campo para ordenar (GivenName, FamilyName, DisplayName, EmployeeNumber)
+    - order_dir (str): Dirección de orden (ASC o DESC)
+    - limit (int): Cantidad de resultados por página (default: 5)
+    - offset (int): Posición inicial para paginación (default: 0)
+    
+    **Ejemplos:**
     ```
     GET /employees
-    GET /employees?active=true
-    GET /employees?limit=50
+    GET /employees?active=true&limit=10
+    GET /employees?search=juan&order_by=FamilyName&order_dir=ASC
+    GET /employees?limit=5&offset=5
     ```
     
     **Respuesta:**
     ```json
     {
       "status": "success",
-      "count": 3,
+      "count": 5,
+      "pagination": {
+        "limit": 5,
+        "offset": 0,
+        "has_more": true,
+        "next_offset": 5,
+        "prev_offset": null
+      },
+      "filters": {
+        "active": true,
+        "search": null,
+        "order_by": "GivenName",
+        "order_dir": "ASC"
+      },
       "employees": [...]
     }
     ```
@@ -129,11 +168,24 @@ async def get_all_employees(
     try:
         client = HTTPClient()
         
-        # Construir query
+        # Construir query con STARTPOSITION y MAXRESULTS para paginación
+        # Nota: QuickBooks no soporta OR con múltiples campos, así que filtramos en Python
         query = "SELECT * FROM Employee"
+        
+        # Solo aplicar filtro de activo en la query
         if active is not None:
             query += f" WHERE Active = {str(active).lower()}"
-        query += f" MAXRESULTS {limit}"
+        
+        # Ordenamiento
+        valid_order_fields = ["GivenName", "FamilyName", "DisplayName", "EmployeeNumber"]
+        if order_by in valid_order_fields:
+            order_direction = "DESC" if order_dir.upper() == "DESC" else "ASC"
+            query += f" ORDERBY {order_by} {order_direction}"
+        
+        # Para búsqueda, traemos más registros y filtramos en Python
+        # Si hay búsqueda, aumentamos el límite temporalmente
+        actual_limit = limit * 10 if search else limit
+        query += f" STARTPOSITION {offset + 1} MAXRESULTS {actual_limit}"
         
         # Construir URL con realm_id de la sesión
         base_url = settings.quickbooks_base_url
@@ -155,9 +207,44 @@ async def get_all_employees(
             data = await response.json()
             employees = data.get("QueryResponse", {}).get("Employee", [])
             
+            # Filtrar por búsqueda en Python si es necesario
+            if search:
+                search_lower = search.lower()
+                filtered_employees = []
+                for emp in employees:
+                    given_name = (emp.get("GivenName") or "").lower()
+                    family_name = (emp.get("FamilyName") or "").lower()
+                    display_name = (emp.get("DisplayName") or "").lower()
+                    
+                    if (search_lower in given_name or 
+                        search_lower in family_name or 
+                        search_lower in display_name):
+                        filtered_employees.append(emp)
+                
+                employees = filtered_employees[:limit]  # Aplicar el límite correcto
+            
+            # Calcular información de paginación
+            total_count = len(employees)
+            has_more = total_count == limit  # Si obtuvimos el límite completo, probablemente hay más
+            next_offset = offset + limit if has_more else None
+            prev_offset = max(0, offset - limit) if offset > 0 else None
+            
             return {
                 "status": "success",
-                "count": len(employees),
+                "count": total_count,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": has_more,
+                    "next_offset": next_offset,
+                    "prev_offset": prev_offset
+                },
+                "filters": {
+                    "active": active,
+                    "search": search,
+                    "order_by": order_by,
+                    "order_dir": order_dir
+                },
                 "employees": employees
             }
         else:
@@ -304,6 +391,9 @@ async def create_employee(request: Request, employee: EmployeeCreate):
         # Convertir a dict y remover None
         employee_data = employee.model_dump(exclude_none=True)
         
+        # Convertir fechas a strings
+        employee_data = convert_dates_to_string(employee_data)
+        
         logger.info(f"➕ Creando empleado: {employee.GivenName} {employee.FamilyName}")
         
         response = await client.post(url, headers=headers, json_data=employee_data)
@@ -401,6 +491,9 @@ async def update_employee(request: Request, employee_id: str, employee: Employee
         
         # Remover solo el campo V4IDPseudonym que es read-only
         employee_data.pop('V4IDPseudonym', None)
+        
+        # Convertir fechas a strings
+        employee_data = convert_dates_to_string(employee_data)
         
         # Asegurar que sparse esté en false para full update
         employee_data['sparse'] = False

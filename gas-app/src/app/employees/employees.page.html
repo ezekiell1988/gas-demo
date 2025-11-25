@@ -1,78 +1,198 @@
-<ion-header>
-  <ion-toolbar color="primary">
-    <ion-title>Empleados</ion-title>
-  </ion-toolbar>
-</ion-header>
+<app-header title="Empleados"></app-header>
 
 <ion-content class="ion-padding">
-  <div *ngIf="loading" class="ion-text-center ion-padding">
-    <ion-spinner name="crescent"></ion-spinner>
-    <p>Cargando empleados...</p>
+  <ion-refresher slot="fixed" (ionRefresh)="handleRefresh($event)">
+    <ion-refresher-content
+      pullingIcon="chevron-down-circle-outline"
+      pullingText="Desliza para actualizar"
+      refreshingSpinner="circles"
+      refreshingText="Actualizando...">
+    </ion-refresher-content>
+  </ion-refresher>
+
+  <div class="ion-padding-bottom">
+    <ion-item lines="none">
+      <ion-label>Mostrar solo empleados activos</ion-label>
+      <ion-toggle [(ngModel)]="showActiveOnly" (ionChange)="loadEmployees()"></ion-toggle>
+    </ion-item>
   </div>
 
-  <div *ngIf="error && !loading" class="ion-text-center ion-padding">
-    <p class="ion-color-danger">{{ error }}</p>
-    <ion-button (click)="loadEmployees()">Reintentar</ion-button>
+  <div class="ion-padding-bottom">
+    <ion-searchbar
+      [(ngModel)]="searchTerm"
+      (ionInput)="onSearch()"
+      placeholder="Buscar por nombre o apellido"
+      showClearButton="focus">
+    </ion-searchbar>
   </div>
 
-  <div *ngIf="!loading && !error">
-    <div *ngIf="employees.length === 0" class="ion-text-center ion-padding">
-      <ion-icon name="person" size="large" class="ion-color-medium"></ion-icon>
-      <p class="ion-color-medium">No hay empleados registrados</p>
-      <ion-button (click)="goToAdd()">Agregar Empleado</ion-button>
+  <div class="ion-padding-bottom">
+    <ion-item lines="none">
+      <ion-label>Ordenar por:</ion-label>
+      <ion-select [(ngModel)]="orderBy" (ionChange)="onSort(orderBy)" interface="popover">
+        <ion-select-option value="GivenName">Nombre</ion-select-option>
+        <ion-select-option value="FamilyName">Apellido</ion-select-option>
+        <ion-select-option value="DisplayName">Nombre completo</ion-select-option>
+        <ion-select-option value="EmployeeNumber">Número de empleado</ion-select-option>
+      </ion-select>
+      <ion-button slot="end" fill="clear" (click)="orderDir = orderDir === 'ASC' ? 'DESC' : 'ASC'; loadEmployees()">
+        <ion-icon [name]="orderDir === 'ASC' ? 'arrow-up' : 'arrow-down'"></ion-icon>
+      </ion-button>
+    </ion-item>
+  </div>
+
+  @if (loading) {
+    <div>
+      @for (item of [1,2,3,4,5]; track item) {
+        <ion-card>
+          <ion-card-header>
+            <ion-card-title>
+              <ion-skeleton-text [animated]="true" style="width: 60%"></ion-skeleton-text>
+            </ion-card-title>
+            <ion-card-subtitle>
+              <ion-skeleton-text [animated]="true" style="width: 40%"></ion-skeleton-text>
+            </ion-card-subtitle>
+          </ion-card-header>
+
+          <ion-card-content>
+            <ion-list lines="none">
+              <ion-item>
+                <ion-skeleton-text [animated]="true" slot="start" style="width: 24px; height: 24px"></ion-skeleton-text>
+                <ion-label>
+                  <ion-skeleton-text [animated]="true" style="width: 80%"></ion-skeleton-text>
+                </ion-label>
+              </ion-item>
+              <ion-item>
+                <ion-skeleton-text [animated]="true" slot="start" style="width: 24px; height: 24px"></ion-skeleton-text>
+                <ion-label>
+                  <ion-skeleton-text [animated]="true" style="width: 60%"></ion-skeleton-text>
+                </ion-label>
+              </ion-item>
+              <ion-item>
+                <ion-skeleton-text [animated]="true" slot="start" style="width: 24px; height: 24px"></ion-skeleton-text>
+                <ion-label>
+                  <ion-skeleton-text [animated]="true" style="width: 90%"></ion-skeleton-text>
+                </ion-label>
+              </ion-item>
+            </ion-list>
+
+            <div class="ion-margin-top">
+              <ion-skeleton-text [animated]="true" style="width: 80px; height: 32px; border-radius: 4px"></ion-skeleton-text>
+            </div>
+          </ion-card-content>
+        </ion-card>
+      }
     </div>
+  }
 
-    <ion-card *ngFor="let employee of employees">
-      <ion-card-header>
-        <ion-card-title>
-          {{ employee.DisplayName || (employee.GivenName + ' ' + employee.FamilyName) }}
-        </ion-card-title>
-        <ion-card-subtitle *ngIf="employee.Title">
-          {{ employee.Title }}
-        </ion-card-subtitle>
-      </ion-card-header>
+  @if (error && !loading) {
+    <div class="ion-text-center ion-padding">
+      <p class="ion-color-danger">{{ error }}</p>
+      <ion-button (click)="loadEmployees()">Reintentar</ion-button>
+    </div>
+  }
 
-      <ion-card-content>
-        <ion-list lines="none">
-          <ion-item *ngIf="employee.PrimaryEmailAddr?.Address">
-            <ion-icon name="mail" slot="start"></ion-icon>
-            <ion-label>{{ employee.PrimaryEmailAddr!.Address }}</ion-label>
-          </ion-item>
-
-          <ion-item *ngIf="employee.PrimaryPhone?.FreeFormNumber">
-            <ion-icon name="call" slot="start"></ion-icon>
-            <ion-label>{{ employee.PrimaryPhone!.FreeFormNumber }}</ion-label>
-          </ion-item>
-
-          <ion-item *ngIf="employee.PrimaryAddr?.Line1">
-            <ion-icon name="location" slot="start"></ion-icon>
-            <ion-label class="ion-text-wrap">
-              {{ employee.PrimaryAddr!.Line1 }}
-              <span *ngIf="employee.PrimaryAddr?.City">, {{ employee.PrimaryAddr!.City }}</span>
-            </ion-label>
-          </ion-item>
-
-          <ion-item *ngIf="employee.EmployeeNumber">
-            <ion-icon name="person" slot="start"></ion-icon>
-            <ion-label>
-              <strong>N° Empleado:</strong> {{ employee.EmployeeNumber }}
-            </ion-label>
-          </ion-item>
-        </ion-list>
-
-        <div class="ion-margin-top">
-          <ion-button (click)="goToEdit(employee)" fill="outline" size="small">
-            <ion-icon name="create" slot="start"></ion-icon>
-            Editar
-          </ion-button>
-          <ion-button (click)="confirmDelete(employee)" fill="outline" color="danger" size="small">
-            <ion-icon name="trash" slot="start"></ion-icon>
-            Eliminar
-          </ion-button>
+  @if (!loading && !error) {
+    <div>
+      @if (employees.length === 0) {
+        <div class="ion-text-center ion-padding">
+          <ion-icon name="person" size="large" class="ion-color-medium"></ion-icon>
+          <p class="ion-color-medium">No hay empleados registrados</p>
+          <ion-button (click)="goToAdd()">Agregar Empleado</ion-button>
         </div>
-      </ion-card-content>
-    </ion-card>
-  </div>
+      }
+
+      @for (employee of employees; track employee.Id) {
+        <ion-card>
+          <ion-card-header>
+            <ion-card-title>
+              {{ employee.DisplayName || (employee.GivenName + ' ' + employee.FamilyName) }}
+            </ion-card-title>
+            @if (employee.Title) {
+              <ion-card-subtitle>
+                {{ employee.Title }}
+              </ion-card-subtitle>
+            }
+          </ion-card-header>
+
+          <ion-card-content>
+            <ion-list lines="none">
+              @if (employee.PrimaryEmailAddr?.Address) {
+                <ion-item>
+                  <ion-icon name="mail" slot="start"></ion-icon>
+                  <ion-label>{{ employee.PrimaryEmailAddr!.Address }}</ion-label>
+                </ion-item>
+              }
+
+              @if (employee.PrimaryPhone?.FreeFormNumber) {
+                <ion-item>
+                  <ion-icon name="call" slot="start"></ion-icon>
+                  <ion-label>{{ employee.PrimaryPhone!.FreeFormNumber }}</ion-label>
+                </ion-item>
+              }
+
+              @if (employee.PrimaryAddr?.Line1) {
+                <ion-item>
+                  <ion-icon name="location" slot="start"></ion-icon>
+                  <ion-label class="ion-text-wrap">
+                    {{ employee.PrimaryAddr!.Line1 }}
+                    @if (employee.PrimaryAddr?.City) {
+                      <span>, {{ employee.PrimaryAddr!.City }}</span>
+                    }
+                  </ion-label>
+                </ion-item>
+              }
+
+              @if (employee.EmployeeNumber) {
+                <ion-item>
+                  <ion-icon name="person" slot="start"></ion-icon>
+                  <ion-label>
+                    <strong>N° Empleado:</strong> {{ employee.EmployeeNumber }}
+                  </ion-label>
+                </ion-item>
+              }
+            </ion-list>
+
+            @if (employee.Id !== '54' && employee.Id !== '55') {
+              <div class="ion-margin-top">
+                <ion-button (click)="goToEdit(employee)" fill="outline" size="small">
+                  <ion-icon name="create" slot="start"></ion-icon>
+                  Editar
+                </ion-button>
+                @if (employee.Active !== false) {
+                  <ion-button (click)="confirmDelete(employee)" fill="outline" color="danger" size="small">
+                    <ion-icon name="trash" slot="start"></ion-icon>
+                    Eliminar
+                  </ion-button>
+                }
+                @if (employee.Active === false) {
+                  <ion-button (click)="confirmActivate(employee)" fill="outline" color="success" size="small">
+                    <ion-icon name="checkmark-circle" slot="start"></ion-icon>
+                    Reactivar
+                  </ion-button>
+                }
+              </div>
+            }
+            @if (employee.Id === '54' || employee.Id === '55') {
+              <div class="ion-margin-top">
+                <ion-note color="medium">
+                  <ion-icon name="eye" style="vertical-align: middle;"></ion-icon>
+                  Solo lectura (empleado de ejemplo)
+                </ion-note>
+              </div>
+            }
+          </ion-card-content>
+        </ion-card>
+      }
+    </div>
+  }
+
+  <ion-infinite-scroll (ionInfinite)="loadMore($event)" [disabled]="!hasMore">
+    <ion-infinite-scroll-content
+      loadingSpinner="bubbles"
+      loadingText="Cargando más empleados...">
+    </ion-infinite-scroll-content>
+  </ion-infinite-scroll>
 
   <ion-fab vertical="bottom" horizontal="end" slot="fixed">
     <ion-fab-button (click)="goToAdd()">

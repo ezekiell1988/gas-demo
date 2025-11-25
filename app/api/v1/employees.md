@@ -23,6 +23,8 @@ Antes de usar los endpoints de empleados, debes:
    GET http://localhost:8002/api/v1/auth/login
    ```
    
+   **Nota:** El puerto por defecto es 8002, configurable mediante la variable de entorno `PORT`.
+   
    Esto creará una cookie de sesión `qb_session` en tu navegador.
 
 2. **Verificar que el token sea válido**
@@ -226,29 +228,41 @@ Modelo para actualizar un empleado existente.
 
 **Resumen:** Listar empleados
 
-**Descripción:** Obtiene la lista completa de empleados desde QuickBooks con opciones de filtrado por estado activo y límite de resultados.
+**Descripción:** Obtiene la lista completa de empleados desde QuickBooks con opciones de filtrado por estado activo, búsqueda, ordenamiento y paginación.
 
 **Parámetros Query:**
 - `active` (bool, opcional): Filtrar por estado activo
   - `true`: Solo empleados activos
   - `false`: Solo empleados inactivos
   - Sin valor: Todos los empleados
-- `limit` (int, default: 100): Límite de resultados
+- `search` (string, opcional): Buscar en nombre, apellido o display name
+- `order_by` (string, default: "GivenName"): Campo para ordenar
+  - Valores válidos: `GivenName`, `FamilyName`, `DisplayName`, `EmployeeNumber`
+- `order_dir` (string, default: "ASC"): Dirección de orden
+  - Valores válidos: `ASC`, `DESC`
+- `limit` (int, default: 5): Cantidad de resultados por página
+- `offset` (int, default: 0): Posición inicial para paginación
 
 **Ejemplos:**
 
 ```bash
-# Obtener todos los empleados
+# Obtener todos los empleados (primera página)
 GET http://localhost:8001/api/v1/employees
 
-# Solo empleados activos
-GET http://localhost:8001/api/v1/employees?active=true
+# Solo empleados activos, 10 por página
+GET http://localhost:8001/api/v1/employees?active=true&limit=10
 
-# Limitar a 50 resultados
-GET http://localhost:8001/api/v1/employees?limit=50
+# Buscar empleados con "Juan"
+GET http://localhost:8001/api/v1/employees?search=juan
 
-# Empleados inactivos, máximo 25
-GET http://localhost:8001/api/v1/employees?active=false&limit=25
+# Ordenar por apellido descendente
+GET http://localhost:8001/api/v1/employees?order_by=FamilyName&order_dir=DESC
+
+# Segunda página (5 resultados por página)
+GET http://localhost:8001/api/v1/employees?limit=5&offset=5
+
+# Combinar filtros: activos, buscar "García", ordenar por nombre, segunda página
+GET http://localhost:8001/api/v1/employees?active=true&search=García&order_by=GivenName&order_dir=ASC&limit=10&offset=10
 ```
 
 **Respuesta Exitosa (200):**
@@ -256,7 +270,20 @@ GET http://localhost:8001/api/v1/employees?active=false&limit=25
 ```json
 {
   "status": "success",
-  "count": 3,
+  "count": 5,
+  "pagination": {
+    "limit": 5,
+    "offset": 0,
+    "has_more": true,
+    "next_offset": 5,
+    "prev_offset": null
+  },
+  "filters": {
+    "active": true,
+    "search": null,
+    "order_by": "GivenName",
+    "order_dir": "ASC"
+  },
   "employees": [
     {
       "Id": "55",
@@ -522,138 +549,7 @@ POST http://localhost:8001/api/v1/employees/55/activate
 
 ---
 
-## 💻 Ejemplos de Uso
 
-### Ejemplo 1: Listar Todos los Empleados Activos
-
-```python
-import aiohttp
-
-async def list_active_employees():
-    url = "http://localhost:8001/api/v1/employees?active=true"
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                print(f"✅ Empleados activos: {data['count']}")
-                
-                for emp in data['employees']:
-                    print(f"  - {emp['DisplayName']} (ID: {emp['Id']})")
-            else:
-                print(f"❌ Error: {resp.status}")
-```
-
----
-
-### Ejemplo 2: Crear un Nuevo Empleado
-
-```python
-import aiohttp
-
-async def create_employee():
-    url = "http://localhost:8001/api/v1/employees"
-    
-    employee_data = {
-        "GivenName": "Carlos",
-        "FamilyName": "Rodríguez",
-        "PrimaryEmailAddr": {
-            "Address": "carlos.rodriguez@example.com"
-        },
-        "PrimaryPhone": {
-            "FreeFormNumber": "(555) 345-6789"
-        },
-        "HiredDate": "2025-02-01",
-        "EmployeeNumber": "EMP-003"
-    }
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=employee_data) as resp:
-            if resp.status == 201:
-                data = await resp.json()
-                print(f"✅ {data['message']}")
-                print(f"ID: {data['employee']['Id']}")
-            else:
-                error = await resp.text()
-                print(f"❌ Error: {error}")
-```
-
----
-
-### Ejemplo 3: Actualizar un Empleado
-
-```python
-import aiohttp
-
-async def update_employee(employee_id: str):
-    base_url = "http://localhost:8001/api/v1/employees"
-    
-    async with aiohttp.ClientSession() as session:
-        # 1. Obtener empleado actual para SyncToken
-        async with session.get(f"{base_url}/{employee_id}") as resp:
-            if resp.status != 200:
-                print("❌ Empleado no encontrado")
-                return
-            
-            current_data = await resp.json()
-            employee = current_data['employee']
-        
-        # 2. Preparar datos actualizados
-        updated_data = {
-            "Id": employee['Id'],
-            "SyncToken": employee['SyncToken'],
-            "GivenName": employee['GivenName'],
-            "FamilyName": "Apellido Actualizado",
-            "PrimaryEmailAddr": {
-                "Address": "nuevo.email@example.com"
-            },
-            "Active": True
-        }
-        
-        # 3. Actualizar empleado
-        async with session.put(f"{base_url}/{employee_id}", json=updated_data) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                print(f"✅ {data['message']}")
-            else:
-                error = await resp.text()
-                print(f"❌ Error: {error}")
-```
-
----
-
-### Ejemplo 4: Desactivar y Reactivar Empleado
-
-```python
-import aiohttp
-
-async def deactivate_and_reactivate(employee_id: str):
-    base_url = "http://localhost:8001/api/v1/employees"
-    
-    async with aiohttp.ClientSession() as session:
-        # 1. Desactivar empleado
-        async with session.delete(f"{base_url}/{employee_id}") as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                print(f"✅ Desactivado: {data['message']}")
-            else:
-                print(f"❌ Error al desactivar")
-                return
-        
-        # 2. Esperar (opcional)
-        import asyncio
-        await asyncio.sleep(2)
-        
-        # 3. Reactivar empleado
-        async with session.post(f"{base_url}/{employee_id}/activate") as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                print(f"✅ Reactivado: {data['message']}")
-            else:
-                print(f"❌ Error al reactivar")
-```
-
----
 
 ## ✅ Validaciones
 

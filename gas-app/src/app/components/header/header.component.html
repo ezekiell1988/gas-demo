@@ -1,0 +1,16 @@
+<ion-header [translucent]="true" class="ion-no-border">
+  <ion-toolbar [color]="color">
+    <ion-buttons slot="start">
+      @if (showMenuButton) {
+      <ion-menu-button></ion-menu-button>
+      }
+    </ion-buttons>
+    <ion-title class="ion-text-center">
+      <ion-icon name="shield-checkmark-outline" style="vertical-align: middle; margin-right: 8px;"></ion-icon>
+      {{ title }}
+    </ion-title>
+    <ion-buttons slot="end">
+      <ng-content select="[slot=end]"></ng-content>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>

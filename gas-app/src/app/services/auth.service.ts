@@ -89,11 +89,14 @@ export class AuthService {
   }
 
   /**
-   * Verifica si la cookie qb_session está presente
+   * Verifica si la cookie qb_session está presente.
+   * NOTA: La cookie es HttpOnly, por lo que JavaScript no puede leerla directamente.
+   * En su lugar, verificamos si el usuario está autenticado según el backend.
+   * Si authenticated=true, significa que la cookie está presente y válida.
    */
   hasCookie(): boolean {
-    return document.cookie
-      .split(';')
-      .some((c) => c.trim().startsWith('qb_session='));
+    const currentStatus = this.authStatusSubject.value;
+    // Si el backend dice que estamos autenticados, la cookie HttpOnly está presente
+    return currentStatus?.authenticated === true;
   }
 }
