@@ -2,13 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { tap, catchError, shareReplay } from 'rxjs/operators';
-
-export interface AuthStatus {
-  authenticated: boolean;
-  token_valid: boolean;
-  realm_id: string | null;
-  expires_at: string | null;
-}
+import { AuthStatus } from '../models';
 
 @Injectable({
   providedIn: 'root'

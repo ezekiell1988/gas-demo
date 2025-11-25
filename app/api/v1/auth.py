@@ -5,7 +5,6 @@ Maneja el flujo OAuth2 para conectar con QuickBooks Online.
 
 from fastapi import APIRouter, HTTPException, Query, Response, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import logging
 import secrets
@@ -13,6 +12,7 @@ import base64
 from datetime import datetime, timedelta
 from itsdangerous import URLSafeTimedSerializer
 
+from app.models.auth import OAuthConfig
 from app.utils.quickbooks_auth import quickbooks_auth
 from app.core.settings import settings
 from app.core.http_request import HTTPClient
@@ -20,22 +20,6 @@ from app.core.http_request import HTTPClient
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-class OAuthConfig(BaseModel):
-    """Configuración de OAuth2 para QuickBooks."""
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "client_id": "ABcsbItNHsBXZBhJUE54khDqCRot2r4aA80p1t6Ky6MMo5q4O8",
-                "client_secret": "786UBsaZkU9c31R3yz4WlU0beOqqHxCeqw87IXtk",
-                "redirect_uri": "http://localhost:8001/api/v1/auth/callback"
-            }
-        }
 
 
 # Configuración OAuth desde variables de entorno

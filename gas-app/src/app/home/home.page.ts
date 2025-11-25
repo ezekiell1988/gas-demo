@@ -45,7 +45,8 @@ import {
   checkmark,
   close,
 } from 'ionicons/icons';
-import { AuthService, AuthStatus } from '../services/auth.service';
+import { AuthService } from '../services';
+import { AuthStatus } from '../models';
 
 @Component({
   selector: 'app-home',

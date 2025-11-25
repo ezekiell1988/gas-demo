@@ -8,6 +8,16 @@ export const routes: Routes = [
     canActivate: [authGuard], // Proteger ruta con guard de autenticación
   },
   {
+    path: 'employees',
+    loadComponent: () => import('./employees/employees.page').then((m) => m.EmployeesPage),
+    canActivate: [authGuard],
+  },
+  {
+    path: 'employee-detail/:id',
+    loadComponent: () => import('./employee-detail/employee-detail.page').then((m) => m.EmployeeDetailPage),
+    canActivate: [authGuard],
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full',

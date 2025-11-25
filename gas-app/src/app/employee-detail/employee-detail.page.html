@@ -1,0 +1,184 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/employees"></ion-back-button>
+    </ion-buttons>
+    <ion-title>{{ isEditMode ? 'Editar Empleado' : 'Nuevo Empleado' }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div *ngIf="loading" class="ion-text-center ion-padding">
+    <ion-spinner name="crescent"></ion-spinner>
+    <p>Cargando datos del empleado...</p>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="employeeForm" (ngSubmit)="onSubmit()">
+    <ion-list>
+      <ion-item>
+        <ion-label position="stacked">Nombre *</ion-label>
+        <ion-input 
+          formControlName="GivenName" 
+          type="text" 
+          placeholder="Ingrese el nombre"
+          [class.ion-invalid]="employeeForm.get('GivenName')?.invalid && employeeForm.get('GivenName')?.touched"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Apellido *</ion-label>
+        <ion-input 
+          formControlName="FamilyName" 
+          type="text" 
+          placeholder="Ingrese el apellido"
+          [class.ion-invalid]="employeeForm.get('FamilyName')?.invalid && employeeForm.get('FamilyName')?.touched"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Segundo Nombre</ion-label>
+        <ion-input 
+          formControlName="MiddleName" 
+          type="text" 
+          placeholder="Segundo nombre (opcional)"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Nombre para Mostrar</ion-label>
+        <ion-input 
+          formControlName="DisplayName" 
+          type="text" 
+          placeholder="Nombre completo a mostrar"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Título/Cargo</ion-label>
+        <ion-input 
+          formControlName="Title" 
+          type="text" 
+          placeholder="Ej: Gerente, Analista"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Email</ion-label>
+        <ion-input 
+          formControlName="Email" 
+          type="email" 
+          placeholder="correo@ejemplo.com"
+          [class.ion-invalid]="employeeForm.get('Email')?.invalid && employeeForm.get('Email')?.touched"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Teléfono</ion-label>
+        <ion-input 
+          formControlName="Phone" 
+          type="tel" 
+          placeholder="(555) 123-4567"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Celular</ion-label>
+        <ion-input 
+          formControlName="Mobile" 
+          type="tel" 
+          placeholder="(555) 987-6543"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Dirección</ion-label>
+        <ion-input 
+          formControlName="AddressLine1" 
+          type="text" 
+          placeholder="Calle y número"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Ciudad</ion-label>
+        <ion-input 
+          formControlName="City" 
+          type="text" 
+          placeholder="Ciudad"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Estado/Provincia</ion-label>
+        <ion-input 
+          formControlName="State" 
+          type="text" 
+          placeholder="Ej: CA, NY"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Código Postal</ion-label>
+        <ion-input 
+          formControlName="PostalCode" 
+          type="text" 
+          placeholder="12345"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Número de Empleado</ion-label>
+        <ion-input 
+          formControlName="EmployeeNumber" 
+          type="text" 
+          placeholder="EMP-001"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Género</ion-label>
+        <ion-select formControlName="Gender" placeholder="Seleccione">
+          <ion-select-option value="">Sin especificar</ion-select-option>
+          <ion-select-option value="Male">Masculino</ion-select-option>
+          <ion-select-option value="Female">Femenino</ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Fecha de Contratación</ion-label>
+        <ion-input 
+          formControlName="HiredDate" 
+          type="date"
+        ></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label>Activo</ion-label>
+        <ion-select formControlName="Active">
+          <ion-select-option [value]="true">Sí</ion-select-option>
+          <ion-select-option [value]="false">No</ion-select-option>
+        </ion-select>
+      </ion-item>
+    </ion-list>
+
+    <div class="ion-padding">
+      <ion-button 
+        expand="block" 
+        type="submit" 
+        [disabled]="employeeForm.invalid || saving"
+      >
+        <ion-icon name="save" slot="start"></ion-icon>
+        {{ saving ? 'Guardando...' : (isEditMode ? 'Actualizar' : 'Guardar') }}
+      </ion-button>
+
+      <ion-button 
+        expand="block" 
+        fill="outline" 
+        (click)="goBack()"
+        [disabled]="saving"
+      >
+        Cancelar
+      </ion-button>
+    </div>
+  </form>
+</ion-content>

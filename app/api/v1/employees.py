@@ -4,12 +4,13 @@ Maneja la creación, lectura, actualización y eliminación de empleados.
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 import logging
-from itsdangerous import URLSafeTimedSerializer
+import json
 
+from app.models.employee import EmployeeCreate, EmployeeUpdate
 from app.utils.quickbooks_auth import quickbooks_auth
 from app.core.http_request import HTTPClient
 from app.core.settings import settings
@@ -22,107 +23,31 @@ router = APIRouter()
 from app.api.v1.auth import user_sessions, serializer
 
 
-# Modelos Pydantic para Employee
-class PhysicalAddress(BaseModel):
-    """Dirección física del empleado."""
-    Line1: Optional[str] = Field(None, max_length=500)
-    Line2: Optional[str] = Field(None, max_length=500)
-    Line3: Optional[str] = Field(None, max_length=500)
-    Line4: Optional[str] = Field(None, max_length=500)
-    Line5: Optional[str] = Field(None, max_length=500)
-    City: Optional[str] = Field(None, max_length=255)
-    Country: Optional[str] = None
-    CountrySubDivisionCode: Optional[str] = Field(None, max_length=255, description="Código de estado/provincia")
-    PostalCode: Optional[str] = None
-
-
-class EmailAddress(BaseModel):
-    """Email del empleado."""
-    Address: Optional[EmailStr] = None
-
-
-class TelephoneNumber(BaseModel):
-    """Número telefónico."""
-    FreeFormNumber: Optional[str] = Field(None, max_length=20)
-
-
-class EmployeeCreate(BaseModel):
-    """Modelo para crear un empleado."""
-    GivenName: str = Field(..., max_length=100, description="Nombre")
-    FamilyName: str = Field(..., max_length=100, description="Apellido")
-    MiddleName: Optional[str] = Field(None, max_length=100, description="Segundo nombre")
-    DisplayName: Optional[str] = Field(None, max_length=500)
-    Title: Optional[str] = Field(None, max_length=16)
-    Suffix: Optional[str] = Field(None, max_length=16)
-    PrimaryEmailAddr: Optional[EmailAddress] = None
-    PrimaryPhone: Optional[TelephoneNumber] = None
-    Mobile: Optional[TelephoneNumber] = None
-    PrimaryAddr: Optional[PhysicalAddress] = None
-    EmployeeNumber: Optional[str] = Field(None, max_length=100)
-    SSN: Optional[str] = Field(None, max_length=100)
-    Gender: Optional[str] = Field(None, description="Male o Female")
-    HiredDate: Optional[date] = None
-    ReleasedDate: Optional[date] = None
-    BirthDate: Optional[date] = None
-    BillableTime: Optional[bool] = False
-    BillRate: Optional[float] = None
-    CostRate: Optional[float] = None
-    Active: Optional[bool] = True
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "GivenName": "Juan",
-                "FamilyName": "Pérez",
-                "MiddleName": "Carlos",
-                "DisplayName": "Juan C. Pérez",
-                "PrimaryEmailAddr": {
-                    "Address": "juan.perez@example.com"
-                },
-                "PrimaryPhone": {
-                    "FreeFormNumber": "(555) 123-4567"
-                },
-                "Mobile": {
-                    "FreeFormNumber": "(555) 987-6543"
-                },
-                "PrimaryAddr": {
-                    "Line1": "123 Main Street",
-                    "City": "San Francisco",
-                    "CountrySubDivisionCode": "CA",
-                    "PostalCode": "94107"
-                },
-                "EmployeeNumber": "EMP-001",
-                "Gender": "Male",
-                "HiredDate": "2024-01-15",
-                "Active": True
+# Helper para procesar errores de QuickBooks
+def parse_quickbooks_error(error_text: str, status_code: int) -> Dict[str, Any]:
+    """Parsea el error de QuickBooks y retorna un JSON estructurado."""
+    try:
+        error_json = json.loads(error_text)
+        if "Fault" in error_json:
+            fault = error_json["Fault"]
+            errors = fault.get("Error", [])
+            return {
+                "error": True,
+                "status_code": status_code,
+                "type": fault.get("type", "Unknown"),
+                "errors": [
+                    {
+                        "message": err.get("Message", ""),
+                        "detail": err.get("Detail", ""),
+                        "code": err.get("code", "")
+                    }
+                    for err in errors
+                ],
+                "time": error_json.get("time")
             }
-        }
-
-
-class EmployeeUpdate(BaseModel):
-    """Modelo para actualizar un empleado."""
-    Id: str = Field(..., description="ID del empleado")
-    SyncToken: str = Field(..., description="Token de sincronización")
-    GivenName: str = Field(..., max_length=100)
-    FamilyName: str = Field(..., max_length=100)
-    MiddleName: Optional[str] = Field(None, max_length=100)
-    DisplayName: Optional[str] = Field(None, max_length=500)
-    Title: Optional[str] = Field(None, max_length=16)
-    Suffix: Optional[str] = Field(None, max_length=16)
-    PrimaryEmailAddr: Optional[EmailAddress] = None
-    PrimaryPhone: Optional[TelephoneNumber] = None
-    Mobile: Optional[TelephoneNumber] = None
-    PrimaryAddr: Optional[PhysicalAddress] = None
-    EmployeeNumber: Optional[str] = Field(None, max_length=100)
-    SSN: Optional[str] = Field(None, max_length=100)
-    Gender: Optional[str] = None
-    HiredDate: Optional[date] = None
-    ReleasedDate: Optional[date] = None
-    BirthDate: Optional[date] = None
-    BillableTime: Optional[bool] = None
-    BillRate: Optional[float] = None
-    CostRate: Optional[float] = None
-    Active: Optional[bool] = None
+        return {"error": True, "status_code": status_code, "message": error_text}
+    except json.JSONDecodeError:
+        return {"error": True, "status_code": status_code, "message": error_text}
 
 
 # Helper para verificar autenticación y obtener tokens de la sesión
@@ -238,8 +163,11 @@ async def get_all_employees(
         else:
             error_text = await response.text()
             logger.error(f"❌ Error obteniendo empleados: {response.status} - {error_text}")
-            raise HTTPException(status_code=response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, response.status)
+            return JSONResponse(status_code=response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -307,8 +235,11 @@ async def get_employee(request: Request, employee_id: str):
         else:
             error_text = await response.text()
             logger.error(f"❌ Error: {response.status} - {error_text}")
-            raise HTTPException(status_code=response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, response.status)
+            return JSONResponse(status_code=response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -389,9 +320,16 @@ async def create_employee(request: Request, employee: EmployeeCreate):
         else:
             error_text = await response.text()
             logger.error(f"❌ Error creando empleado: {response.status} - {error_text}")
-            raise HTTPException(status_code=response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, response.status)
+            return JSONResponse(status_code=response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"❌ Excepción: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Excepción: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -461,7 +399,15 @@ async def update_employee(request: Request, employee_id: str, employee: Employee
         # Convertir a dict y remover None
         employee_data = employee.model_dump(exclude_none=True)
         
+        # Remover solo el campo V4IDPseudonym que es read-only
+        employee_data.pop('V4IDPseudonym', None)
+        
+        # Asegurar que sparse esté en false para full update
+        employee_data['sparse'] = False
+        
         logger.info(f"✏️ Actualizando empleado ID: {employee_id}")
+        logger.info(f"📤 Datos a enviar: {employee_data}")
+        logger.info(f"🏢 Realm ID: {realm_id}")
         
         response = await client.post(url, headers=headers, json_data=employee_data)
         
@@ -477,8 +423,11 @@ async def update_employee(request: Request, employee_id: str, employee: Employee
         else:
             error_text = await response.text()
             logger.error(f"❌ Error actualizando empleado: {response.status} - {error_text}")
-            raise HTTPException(status_code=response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, response.status)
+            return JSONResponse(status_code=response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -534,7 +483,8 @@ async def deactivate_employee(request: Request, employee_id: str):
         
         if get_response.status != 200:
             error_text = await get_response.text()
-            raise HTTPException(status_code=get_response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, get_response.status)
+            return JSONResponse(status_code=get_response.status, content=error_detail)
         
         employee_data = await get_response.json()
         employee = employee_data.get("Employee")
@@ -560,8 +510,11 @@ async def deactivate_employee(request: Request, employee_id: str):
         else:
             error_text = await update_response.text()
             logger.error(f"❌ Error desactivando empleado: {update_response.status} - {error_text}")
-            raise HTTPException(status_code=update_response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, update_response.status)
+            return JSONResponse(status_code=update_response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -613,7 +566,8 @@ async def activate_employee(request: Request, employee_id: str):
         
         if get_response.status != 200:
             error_text = await get_response.text()
-            raise HTTPException(status_code=get_response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, get_response.status)
+            return JSONResponse(status_code=get_response.status, content=error_detail)
         
         employee_data = await get_response.json()
         employee = employee_data.get("Employee")
@@ -639,8 +593,11 @@ async def activate_employee(request: Request, employee_id: str):
         else:
             error_text = await update_response.text()
             logger.error(f"❌ Error activando empleado: {update_response.status} - {error_text}")
-            raise HTTPException(status_code=update_response.status, detail=error_text)
+            error_detail = parse_quickbooks_error(error_text, update_response.status)
+            return JSONResponse(status_code=update_response.status, content=error_detail)
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Excepción: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
